@@ -1,0 +1,21 @@
+{
+	"ImportPath": "github.com/user/hello",
+	"GoVersion": "go1.6",
+	"GodepVersion": "v74",
+	"Deps": [
+		{
+			"ImportPath": "github.com/eclipse/paho.mqtt.golang",
+			"Comment": "v1.0.0",
+			"Rev": "45f9b18f4864c81d49c3ed01e5faec9eeb05de31"
+		},
+		{
+			"ImportPath": "github.com/eclipse/paho.mqtt.golang/packets",
+			"Comment": "v1.0.0",
+			"Rev": "45f9b18f4864c81d49c3ed01e5faec9eeb05de31"
+		},
+		{
+			"ImportPath": "golang.org/x/net/websocket",
+			"Rev": "bc3663df0ac92f928d419e31e0d2af22e683a5a2"
+		}
+	]
+}
