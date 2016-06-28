@@ -16,7 +16,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -25,28 +25,31 @@ import (
 	"github.com/eclipse/paho.mqtt.golang"
 )
 
-func echoHandler(ws *websocket.Conn) {
-	msg := make([]byte, 512)
-	n, err := ws.Read(msg)
+func main() {
+	ch := mqttSubscribe("/foo/val", "tcp://localhost:1883", "gotrivial")
+	http.Handle("/echo", websocket.Handler(newWsHandler(ch)))
+	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
-		log.Fatal(err)
+		panic("ListenAndServe: " + err.Error())
 	}
-	fmt.Printf("Receive: %s\n", msg[:n])
-
-	m, err := ws.Write(msg[:n])
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Send: %s\n", msg[:m])
 }
 
-func newMqttHandler(ch chan string) func(mqtt.Client, mqtt.Message) {
+func newWsHandler(ch chan []byte) func(*websocket.Conn) {
+	return func(ws *websocket.Conn) {
+		for {
+			req := <-ch
+			ws.Write(req)
+		}
+	}
+}
+
+func newMqttHandler(ch chan []byte) func(mqtt.Client, mqtt.Message) {
 	return func(c mqtt.Client, m mqtt.Message) {
-		ch <- string(m.Payload())
+		ch <- m.Payload()
 	}
 }
 
-func mqttSubscribe(topic, url, clientID string) chan string {
+func mqttSubscribe(topic, url, clientID string) chan []byte {
 	opts := mqtt.NewClientOptions().AddBroker(url).SetClientID(clientID)
 	opts.SetKeepAlive(20 * time.Second)
 	opts.SetPingTimeout(1 * time.Second)
@@ -56,7 +59,7 @@ func mqttSubscribe(topic, url, clientID string) chan string {
 		panic(token.Error())
 	}
 
-	ch := make(chan string)
+	ch := make(chan []byte)
 	token := c.Subscribe(topic, 0, newMqttHandler(ch))
 
 	if token.Wait() && token.Error() != nil {
@@ -65,26 +68,4 @@ func mqttSubscribe(topic, url, clientID string) chan string {
 	}
 
 	return ch
-}
-
-func main() {
-	//websocket
-	// http.Handle("/echo", websocket.Handler(echoHandler))
-	// fmt.Printf("Listening 1 ...")
-	// err := http.ListenAndServe(":8080", nil)
-	// fmt.Printf("Listening 2 ...")
-	// if err != nil {
-	// 	panic("ListenAndServe: " + err.Error())
-	// }
-
-	ch := mqttSubscribe("/foo/val", "tcp://localhost:1883", "gotrivial")
-
-	for {
-		req := <-ch
-		fmt.Printf("MQTT received: %s\n", req)
-	}
-
-	// c.Disconnect(250)
-
-	// time.Sleep(1 * time.Second)
 }
