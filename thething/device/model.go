@@ -78,6 +78,10 @@ type UI struct {
 	Link
 }
 
+type Things struct {
+	Things []string `json:"things"`
+}
+
 func (m Model) ToString() string {
 	out, err := json.Marshal(m)
 	if err != nil {
