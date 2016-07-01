@@ -1,5 +1,5 @@
 {
-    "id": "pi",
+    "id": "simple-thing",
     "name": "My WoT Raspberry PI",
     "description": "A simple WoT-connected Raspberry PI for the WoT Label.",
     "tags": [
