@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"container/list"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -16,30 +15,38 @@ import (
 
 //http://thenewstack.io/make-a-restful-json-api-go/
 func main() {
-
-	models := loadModels()
-
 	r := mux.NewRouter().StrictSlash(true)
-	appendDevices(r, models)
+
+	loadModels(r)
+
 	// r.PathPrefix("/model").HandlerFunc(Model)
 
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
 
-func loadModels() *list.List {
+func loadModels(r *mux.Router) {
 	files, err := ioutil.ReadDir("models")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	thingModels := list.New()
+	var things device.Things
+	things.Things = make([]string, 0)
+
 	for _, fileInfo := range files {
 		if fileInfo.IsDir() == false {
-			thingModels.PushBack(loadModel(fileInfo.Name()))
+			model := loadModel(fileInfo.Name())
+
+			processModel(r, model)
+
+			things.Things = append(things.Things, Concat("/", model.ID))
 		}
 	}
 
-	return thingModels
+	r.HandleFunc(("/"),
+		func(w http.ResponseWriter, r *http.Request) {
+			EncodeJson(w, things)
+		})
 }
 
 const modelRoot = "models"
@@ -48,40 +55,34 @@ func loadModel(fileName string) device.Model {
 	fullFileName := Concat(modelRoot, "/", fileName)
 	file, e := ioutil.ReadFile(fullFileName)
 
-	var model device.Model
-
 	if e != nil {
 		fmt.Printf("File error: %v\n", e)
 		os.Exit(1)
-	} else {
-		json.Unmarshal(file, &model)
 	}
+
+	var model device.Model
+
+	json.Unmarshal(file, &model)
 
 	return model
 }
 
-func appendDevices(r *mux.Router, devices *list.List) {
-	deviceUrls := make([]string, devices.Len())
+func processModel(r *mux.Router, model device.Model) {
+	addRootPath(r, model)
+	addModelPath(r, model)
+}
 
-	i := 0
-	for e := devices.Front(); e != nil; e = e.Next() {
-		model := e.Value.(device.Model)
-
-		r.HandleFunc(Concat("/", model.ID),
-			func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, "Device information for -> %s", model.ID)
-			})
-
-		deviceUrls[i] = Concat("/", model.ID)
-		i++
-	}
-
-	var things device.Things
-	things.Things = deviceUrls
-
-	r.HandleFunc(("/"),
+func addRootPath(r *mux.Router, model device.Model) {
+	r.HandleFunc(Concat("/", model.ID),
 		func(w http.ResponseWriter, r *http.Request) {
-			EncodeJson(w, things)
+			fmt.Fprintf(w, "Device information for -> %s", model.ID)
+		})
+}
+
+func addModelPath(r *mux.Router, model device.Model) {
+	r.HandleFunc(Concat("/", model.ID, "/model"),
+		func(w http.ResponseWriter, r *http.Request) {
+			EncodeJson(w, model)
 		})
 }
 
