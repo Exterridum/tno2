@@ -1,4 +1,4 @@
-package device
+package model
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ type Loader interface {
 	Load(url string) Model
 }
 
-func Load(uri string) Model {
+func Load(uri string) *Model {
 	sep := strings.Split(uri, "://")
 	method, path := sep[0], sep[1]
 
@@ -21,10 +21,10 @@ func Load(uri string) Model {
 		return fromFile(path)
 	}
 
-	return Model{}
+	return &Model{}
 }
 
-func fromFile(path string) Model {
+func fromFile(path string) *Model {
 	file, e := ioutil.ReadFile(path)
 
 	if e != nil {
@@ -36,5 +36,5 @@ func fromFile(path string) Model {
 
 	json.Unmarshal(file, &model)
 
-	return model
+	return &model
 }
