@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/conas/tno2/wot/model"
 	"github.com/gorilla/mux"
@@ -15,22 +16,26 @@ var store = make(map[string]interface{})
 
 //http://thenewstack.io/make-a-restful-json-api-go/
 type ProtoHttp struct {
+	port   int
 	router *mux.Router
 }
 
-type Route struct {
+type route struct {
 	Name        string
 	Method      string
 	Pattern     string
 	HandlerFunc http.HandlerFunc
 }
 
-func New() *ProtoHttp {
+func Http(port int) *ProtoHttp {
 	// r.PathPrefix("/model").HandlerFunc(Model)
-	return &ProtoHttp{mux.NewRouter().StrictSlash(true)}
+	return &ProtoHttp{
+		port,
+		mux.NewRouter().StrictSlash(true),
+	}
 }
 
-func (p *ProtoHttp) Attach(model *model.Model) {
+func (p *ProtoHttp) Bind(model *model.Model) {
 	routes := parse(model)
 
 	for _, route := range routes {
@@ -38,11 +43,12 @@ func (p *ProtoHttp) Attach(model *model.Model) {
 	}
 }
 
-func (p *ProtoHttp) Start(port string) {
+func (p *ProtoHttp) Start() {
+	port := Concat(":", strconv.Itoa(p.port))
 	log.Fatal(http.ListenAndServe(port, p.router))
 }
 
-func (p *ProtoHttp) append(route *Route) {
+func (p *ProtoHttp) append(route *route) {
 	p.router.
 		Methods(route.Method).
 		Path(route.Pattern).
@@ -50,9 +56,9 @@ func (p *ProtoHttp) append(route *Route) {
 		Handler(route.HandlerFunc)
 }
 
-func parse(model *model.Model) []*Route {
-	var routes []*Route
-	routes = make([]*Route, 0)
+func parse(model *model.Model) []*route {
+	var routes []*route
+	routes = make([]*route, 0)
 
 	routes = append(routes, rootPath(model))
 	routes = append(routes, modelPath(model))
@@ -64,8 +70,8 @@ func parse(model *model.Model) []*Route {
 	return routes
 }
 
-func rootPath(model *model.Model) *Route {
-	return &Route{
+func rootPath(model *model.Model) *route {
+	return &route{
 		"Index",
 		"GET",
 		Concat("/", model.Name),
@@ -75,8 +81,8 @@ func rootPath(model *model.Model) *Route {
 	}
 }
 
-func modelPath(model *model.Model) *Route {
-	return &Route{
+func modelPath(model *model.Model) *route {
+	return &route{
 		"model",
 		"GET",
 		Concat("/", model.Name, "/model"),
@@ -86,9 +92,9 @@ func modelPath(model *model.Model) *Route {
 	}
 }
 
-func propertiesPath(model *model.Model) []*Route {
-	var routes []*Route
-	routes = make([]*Route, 0)
+func propertiesPath(model *model.Model) []*route {
+	var routes []*route
+	routes = make([]*route, 0)
 
 	for _, prop := range model.Properties {
 		routes = append(routes, getProperty(&prop, model.Name))
@@ -101,13 +107,13 @@ func propertiesPath(model *model.Model) []*Route {
 	return routes
 }
 
-func getProperty(prop *model.Property, ctx string) *Route {
+func getProperty(prop *model.Property, ctx string) *route {
 	path := Concat("/", ctx, "/", prop.Hrefs[0])
-	e := encoder(prop)
+	e := Encoder(prop)
 
 	store[path] = 5
 
-	return &Route{
+	return &route{
 		path,
 		"GET",
 		path,
@@ -117,11 +123,11 @@ func getProperty(prop *model.Property, ctx string) *Route {
 	}
 }
 
-func setProperty(prop *model.Property, ctx string) *Route {
+func setProperty(prop *model.Property, ctx string) *route {
 	path := Concat("/", ctx, "/", prop.Hrefs[0])
-	d := decoder(prop)
+	d := Decoder(prop)
 
-	return &Route{
+	return &route{
 		path,
 		"PUT",
 		path,
@@ -129,40 +135,6 @@ func setProperty(prop *model.Property, ctx string) *Route {
 			store[path] = d(w, r)
 		},
 	}
-}
-
-func encoder(prop *model.Property) func(w http.ResponseWriter, r *http.Request) interface{} {
-	switch prop.ValueType.Type {
-
-	case "number":
-		return func(w http.ResponseWriter, r *http.Request) interface{} {
-			return WotNumber{store[r.RequestURI].(float64)}
-		}
-	}
-
-	return nil
-}
-
-func decoder(prop *model.Property) func(w http.ResponseWriter, r *http.Request) interface{} {
-	switch prop.ValueType.Type {
-
-	case "number":
-		return func(w http.ResponseWriter, r *http.Request) interface{} {
-			var v WotNumber
-			json.NewDecoder(r.Body).Decode(&v)
-			return v.Value
-		}
-	}
-
-	return nil
-}
-
-type WotNumber struct {
-	Value float64
-}
-
-type WotString struct {
-	Value string
 }
 
 func EncodeJson(w http.ResponseWriter, payload interface{}) {
