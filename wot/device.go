@@ -6,8 +6,7 @@ import (
 )
 
 func main() {
-	model := model.Load("file://model/testdata/case-1.json")
 	http := protocol.New()
-	http.Attach(model)
+	http.Attach(model.Load("file://model/testdata/case-1.json"))
 	http.Start(":8080")
 }

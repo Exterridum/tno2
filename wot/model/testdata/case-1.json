@@ -1,15 +1,27 @@
 {
-  "@context": ["http://w3c.github.io/wot/w3c-wot-td-context.jsonld"],
+  "@context": [
+    "http://w3c.github.io/wot/w3c-wot-td-context.jsonld"
+  ],
   "@type": "Thing",
   "name": "MyTemperatureThing",
-  "uris": ["coap://mytemp.example.com:5683/"],
-  "encodings": ["JSON"],
+  "uris": [
+    "coap://mytemp.example.com:5683/"
+  ],
+  "encodings": [
+    "JSON"
+  ],
   "properties": [
     {
       "name": "temperature",
-      "valueType": { "type": "number" },
-      "writable": false,
-      "hrefs": ["temp"]
+      "valueType": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 255
+      },
+      "writable": true,
+      "hrefs": [
+        "temp"
+      ]
     }
   ]
 }
