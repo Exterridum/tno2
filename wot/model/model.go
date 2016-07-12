@@ -4,7 +4,7 @@ import "encoding/json"
 
 type Context []interface{}
 
-type Model struct {
+type ThingDescription struct {
 	AT_Context Context    `json:"@context"`
 	AT_Type    string     `json:"@type"`
 	Name       string     `json:"name"`
@@ -26,8 +26,8 @@ type ValueType struct {
 	Maximum int    `json:"maximum"`
 }
 
-func (m Model) ToString() string {
-	out, err := json.Marshal(m)
+func (td ThingDescription) ToString() string {
+	out, err := json.Marshal(td)
 	if err != nil {
 		panic(err)
 	}

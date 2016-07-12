@@ -10,10 +10,10 @@ import (
 
 //TODO: Implement extension pattern
 type Loader interface {
-	Load(url string) Model
+	Load(url string) ThingDescription
 }
 
-func Load(uri string) *Model {
+func Load(uri string) *ThingDescription {
 	sep := strings.Split(uri, "://")
 	method, path := sep[0], sep[1]
 
@@ -21,10 +21,10 @@ func Load(uri string) *Model {
 		return fromFile(path)
 	}
 
-	return &Model{}
+	return &ThingDescription{}
 }
 
-func fromFile(path string) *Model {
+func fromFile(path string) *ThingDescription {
 	file, e := ioutil.ReadFile(path)
 
 	if e != nil {
@@ -32,9 +32,9 @@ func fromFile(path string) *Model {
 		os.Exit(1)
 	}
 
-	var model Model
+	var td ThingDescription
 
-	json.Unmarshal(file, &model)
+	json.Unmarshal(file, &td)
 
-	return &model
+	return &td
 }

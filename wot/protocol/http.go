@@ -35,8 +35,8 @@ func Http(port int) *ProtoHttp {
 	}
 }
 
-func (p *ProtoHttp) Bind(model *model.Model) {
-	routes := parse(model)
+func (p *ProtoHttp) Bind(td *model.ThingDescription) {
+	routes := parse(td)
 
 	for _, route := range routes {
 		p.append(route)
@@ -56,51 +56,51 @@ func (p *ProtoHttp) append(route *route) {
 		Handler(route.HandlerFunc)
 }
 
-func parse(model *model.Model) []*route {
+func parse(td *model.ThingDescription) []*route {
 	var routes []*route
 	routes = make([]*route, 0)
 
-	routes = append(routes, rootPath(model))
-	routes = append(routes, modelPath(model))
+	routes = append(routes, rootPath(td))
+	routes = append(routes, modelPath(td))
 
-	for _, path := range propertiesPath(model) {
+	for _, path := range propertiesPath(td) {
 		routes = append(routes, path)
 	}
 
 	return routes
 }
 
-func rootPath(model *model.Model) *route {
+func rootPath(td *model.ThingDescription) *route {
 	return &route{
 		"Index",
 		"GET",
-		Concat("/", model.Name),
+		Concat("/", td.Name),
 		func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "Device information for -> %s", model.Name)
+			fmt.Fprintf(w, "Device information for -> %s", td.Name)
 		},
 	}
 }
 
-func modelPath(model *model.Model) *route {
+func modelPath(td *model.ThingDescription) *route {
 	return &route{
 		"model",
 		"GET",
-		Concat("/", model.Name, "/model"),
+		Concat("/", td.Name, "/model"),
 		func(w http.ResponseWriter, r *http.Request) {
-			EncodeJson(w, model)
+			EncodeJson(w, td)
 		},
 	}
 }
 
-func propertiesPath(model *model.Model) []*route {
+func propertiesPath(td *model.ThingDescription) []*route {
 	var routes []*route
 	routes = make([]*route, 0)
 
-	for _, prop := range model.Properties {
-		routes = append(routes, getProperty(&prop, model.Name))
+	for _, prop := range td.Properties {
+		routes = append(routes, getProperty(&prop, td.Name))
 
 		if prop.Writable {
-			routes = append(routes, setProperty(&prop, model.Name))
+			routes = append(routes, setProperty(&prop, td.Name))
 		}
 	}
 
@@ -170,9 +170,3 @@ func Concat(strings ...string) string {
 // 			things.Things = append(things.Things, Concat("/", model.ID))
 // 		}
 // 	}
-
-// 	r.HandleFunc(("/"),
-// 		func(w http.ResponseWriter, r *http.Request) {
-// 			EncodeJson(w, things)
-// 		})
-// }
