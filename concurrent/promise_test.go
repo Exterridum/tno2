@@ -13,7 +13,7 @@ func TestCase1(t *testing.T) {
 	}).Then(func(val interface{}) interface{} {
 		Equals(t, 14, val.(int))
 		return nil
-	}).End()
+	})
 
 	time.Sleep(time.Second * 1)
 }
