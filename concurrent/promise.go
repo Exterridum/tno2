@@ -15,6 +15,10 @@ func (prev *Promise) Then(stage func(response interface{}) interface{}) *Promise
 	return &next
 }
 
+func (prev *Promise) End() {
+	<-prev.pch
+}
+
 func NewPromise(c chan interface{}) *Promise {
 	return &Promise{c}
 }
