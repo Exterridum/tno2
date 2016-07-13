@@ -1,4 +1,4 @@
-package proxy
+package wot
 
 import "github.com/conas/tno2/wot/model"
 
@@ -35,4 +35,16 @@ type Client interface {
 	RemoveAllListeners(eventName string) *Client
 
 	GetDescription() model.ThingDescription
+}
+
+func Discover(discoveryType string, filter interface{}) []*Client {
+	return nil
+}
+
+func ConsumeDescription(td model.ThingDescription) *Client {
+	return nil
+}
+
+func ConsumeDescriptionUri(uri string) *Client {
+	return nil
 }

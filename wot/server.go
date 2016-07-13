@@ -3,6 +3,8 @@ package wot
 import (
 	"reflect"
 
+	"github.com/conas/tno2/concurrent"
+	"github.com/conas/tno2/wot/driver"
 	"github.com/conas/tno2/wot/model"
 )
 
@@ -29,32 +31,106 @@ import (
 //     ExposedThing removeAllListeners(DOMString eventName);
 //     object       getDescription();
 // };
-type Server interface {
-	Name() string
+type Server struct {
+	td *model.ThingDescription
 
-	InvokeAction(actionName string, parameter interface{}) interface{}
+	invoke chan interface{}
 
-	SetProperty(propertyName string, newValue interface{}) interface{}
+	notification chan interface{}
 
-	GetProperty(propertyName string) interface{}
+	actions map[string]func(interface{}) interface{}
 
-	EmitEvent(eventName string, payload interface{}) interface{}
+	properties map[string]interface{}
 
-	AddEvent(eventName string, payloadType reflect.Type) *Server
+	events map[string]reflect.Type
+}
 
-	AddAction(actionName string, inputType interface{}, outputType interface{}) *Server
+func (s *Server) Name() string {
+	return s.td.Name
+}
 
-	AddProperty(propertyName string, contentType reflect.Type) *Server
+func (s *Server) InvokeAction(actionName string, parameter interface{}) *concurent.Promise {
+	c := make(chan interface{})
+	p := concurent.NewPromise(c)
 
-	OnInvokeAction(actionName string, callback func(interface{}) interface{}) *Server
+	s.send(&driver.InvokeActionRQ{
+		c,
+		actionName,
+		parameter,
+	})
 
-	OnUpdateProperty(propertyName string, callback func(interface{}) interface{}) *Server
+	return p
+}
 
-	AddListener(eventName string, listener EventListener) *Server
+func (s *Server) send(message *driver.InvokeActionRQ) {
+	go func() {
+		s.invoke <- message
+	}()
+}
 
-	RemoveListener(eventName string, listener EventListener) *Server
+func (s *Server) SetProperty(propertyName string, newValue interface{}) interface{} {
+	return nil
+}
 
-	RemoveAllListeners(eventName string) *Server
+func (s *Server) GetProperty(propertyName string) interface{} {
+	return nil
+}
 
-	GetDescription() model.ThingDescription
+func (s *Server) EmitEvent(eventName string, payload interface{}) interface{} {
+	return nil
+}
+
+func (s *Server) AddEvent(eventName string, payloadType reflect.Type) *Server {
+	return nil
+}
+
+func (s *Server) AddAction(actionName string, inputType interface{}, outputType interface{}) *Server {
+	return nil
+}
+
+func (s *Server) AddProperty(propertyName string, contentType reflect.Type) *Server {
+	return nil
+}
+
+func (s *Server) OnInvokeAction(actionName string, callback func(interface{}) interface{}) *Server {
+	return nil
+}
+
+func (s *Server) OnUpdateProperty(propertyName string, callback func(interface{}) interface{}) *Server {
+	return nil
+}
+
+func (s *Server) AddListener(eventName string, listener EventListener) *Server {
+	return nil
+}
+
+func (s *Server) RemoveListener(eventName string, listener EventListener) *Server {
+	return nil
+}
+
+func (s *Server) RemoveAllListeners(eventName string) *Server {
+	return nil
+}
+
+func (s *Server) GetDescription() *model.ThingDescription {
+	return s.td
+}
+
+func CreateThing(name string) *Server {
+	return nil
+}
+
+func CreateFromDescriptionUri(uri string) *Server {
+	return CreateFromDescription(model.Create(uri))
+}
+
+func CreateFromDescription(td *model.ThingDescription) *Server {
+	return &Server{
+		td,
+		make(chan interface{}),
+		make(chan interface{}),
+		make(map[string]func(interface{}) interface{}),
+		make(map[string]interface{}),
+		make(map[string]reflect.Type),
+	}
 }

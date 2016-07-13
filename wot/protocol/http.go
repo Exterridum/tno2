@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/conas/tno2/wot"
 	"github.com/conas/tno2/wot/model"
 	"github.com/gorilla/mux"
 )
@@ -37,10 +38,11 @@ func Http(port int) *ProtoHttp {
 	}
 }
 
-func (p *ProtoHttp) Bind(ctxPath string, td *model.ThingDescription) {
+func (p *ProtoHttp) Bind(ctxPath string, s *wot.Server) {
+	td := s.GetDescription()
 	td.Uris = append(td.Uris, Concat("http://localhost:8080", ctxPath))
 
-	routes := createRoutes(td)
+	routes := createRoutes(&td)
 
 	for _, route := range routes {
 		p.append(ctxPath, route)

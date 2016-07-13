@@ -8,12 +8,7 @@ import (
 	"strings"
 )
 
-//TODO: Implement extension pattern
-type Loader interface {
-	Load(url string) ThingDescription
-}
-
-func Load(uri string) *ThingDescription {
+func Create(uri string) *ThingDescription {
 	sep := strings.Split(uri, "://")
 	method, path := sep[0], sep[1]
 
