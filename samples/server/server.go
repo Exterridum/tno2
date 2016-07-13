@@ -7,6 +7,6 @@ import (
 
 func main() {
 	http := protocol.Http(8080)
-	http.Bind(model.Load("file://../../wot/model/testdata/case-1.json"))
+	http.Bind("/sample-thing", model.Load("file://../../wot/model/testdata/case-1.json"))
 	http.Start()
 }

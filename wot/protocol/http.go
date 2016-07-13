@@ -18,6 +18,7 @@ var store = make(map[string]interface{})
 type ProtoHttp struct {
 	port   int
 	router *mux.Router
+	hrefs  []string
 }
 
 type route struct {
@@ -32,14 +33,17 @@ func Http(port int) *ProtoHttp {
 	return &ProtoHttp{
 		port,
 		mux.NewRouter().StrictSlash(true),
+		make([]string, 0),
 	}
 }
 
-func (p *ProtoHttp) Bind(td *model.ThingDescription) {
-	routes := parse(td)
+func (p *ProtoHttp) Bind(ctxPath string, td *model.ThingDescription) {
+	td.Uris = append(td.Uris, Concat("http://localhost:8080", ctxPath))
+
+	routes := createRoutes(td)
 
 	for _, route := range routes {
-		p.append(route)
+		p.append(ctxPath, route)
 	}
 }
 
@@ -48,20 +52,12 @@ func (p *ProtoHttp) Start() {
 	log.Fatal(http.ListenAndServe(port, p.router))
 }
 
-func (p *ProtoHttp) append(route *route) {
-	p.router.
-		Methods(route.Method).
-		Path(route.Pattern).
-		Name(route.Name).
-		Handler(route.HandlerFunc)
-}
-
-func parse(td *model.ThingDescription) []*route {
+func createRoutes(td *model.ThingDescription) []*route {
 	var routes []*route
 	routes = make([]*route, 0)
 
 	routes = append(routes, rootPath(td))
-	routes = append(routes, modelPath(td))
+	routes = append(routes, descriptionPath(td))
 
 	for _, path := range propertiesPath(td) {
 		routes = append(routes, path)
@@ -70,24 +66,32 @@ func parse(td *model.ThingDescription) []*route {
 	return routes
 }
 
+func (p *ProtoHttp) append(ctxPath string, route *route) {
+	p.router.
+		Methods(route.Method).
+		Path(Concat(ctxPath, "/", route.Pattern)).
+		Name(route.Name).
+		Handler(route.HandlerFunc)
+}
+
 func rootPath(td *model.ThingDescription) *route {
 	return &route{
 		"Index",
 		"GET",
-		Concat("/", td.Name),
+		"",
 		func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "Device information for -> %s", td.Name)
 		},
 	}
 }
 
-func modelPath(td *model.ThingDescription) *route {
+func descriptionPath(td *model.ThingDescription) *route {
 	return &route{
 		"model",
 		"GET",
-		Concat("/", td.Name, "/model"),
+		"description",
 		func(w http.ResponseWriter, r *http.Request) {
-			EncodeJson(w, td)
+			createResponse(w, td)
 		},
 	}
 }
@@ -97,47 +101,43 @@ func propertiesPath(td *model.ThingDescription) []*route {
 	routes = make([]*route, 0)
 
 	for _, prop := range td.Properties {
-		routes = append(routes, getProperty(&prop, td.Name))
+		routes = append(routes, getPropertyPath(&prop))
 
 		if prop.Writable {
-			routes = append(routes, setProperty(&prop, td.Name))
+			routes = append(routes, setPropertyPath(&prop))
 		}
 	}
 
 	return routes
 }
 
-func getProperty(prop *model.Property, ctx string) *route {
-	path := Concat("/", ctx, "/", prop.Hrefs[0])
+func getPropertyPath(prop *model.Property) *route {
 	e := Encoder(prop)
 
-	store[path] = 5
-
 	return &route{
-		path,
+		prop.Hrefs[0],
 		"GET",
-		path,
+		prop.Hrefs[0],
 		func(w http.ResponseWriter, r *http.Request) {
-			EncodeJson(w, e(w, r))
+			createResponse(w, e(store[prop.Hrefs[0]]))
 		},
 	}
 }
 
-func setProperty(prop *model.Property, ctx string) *route {
-	path := Concat("/", ctx, "/", prop.Hrefs[0])
+func setPropertyPath(prop *model.Property) *route {
 	d := Decoder(prop)
 
 	return &route{
-		path,
+		prop.Hrefs[0],
 		"PUT",
-		path,
+		prop.Hrefs[0],
 		func(w http.ResponseWriter, r *http.Request) {
-			store[path] = d(w, r)
+			store[prop.Hrefs[0]] = d(r.Body)
 		},
 	}
 }
 
-func EncodeJson(w http.ResponseWriter, payload interface{}) {
+func createResponse(w http.ResponseWriter, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(payload)
 }

@@ -36,5 +36,7 @@ func fromFile(path string) *ThingDescription {
 
 	json.Unmarshal(file, &td)
 
+	td.Uris = make([]string, 0)
+
 	return &td
 }
