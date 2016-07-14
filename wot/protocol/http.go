@@ -42,7 +42,7 @@ func (p *ProtoHttp) Bind(ctxPath string, s *wot.Server) {
 	td := s.GetDescription()
 	td.Uris = append(td.Uris, Concat("http://localhost:8080", ctxPath))
 
-	routes := createRoutes(&td)
+	routes := createRoutes(td)
 
 	for _, route := range routes {
 		p.append(ctxPath, route)

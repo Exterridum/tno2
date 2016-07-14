@@ -38,6 +38,12 @@ type Server struct {
 	actions    map[string]func(interface{}) interface{}
 	properties map[string]interface{}
 	events     map[string]reflect.Type
+	driver     driver.Driver
+}
+
+func (s *Server) Bind(d driver.Driver) {
+	s.driver = d
+	d.SetInputChannel(s.device)
 }
 
 func (s *Server) Name() string {
