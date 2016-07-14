@@ -1,20 +1,52 @@
 package driver
 
+type Channel interface {
+	SetChannel(ch chan<- interface{})
+	GetChannel() chan<- interface{}
+}
+
 type InvokeActionRQ struct {
-	Response  chan interface{}
-	Name      string
-	Parameter interface{}
+	ActionName string
+	Parameter  interface{}
+	callbackCh chan<- interface{}
+}
+
+func (m *InvokeActionRQ) SetChannel(ch chan<- interface{}) {
+	m.callbackCh = ch
+}
+
+func (m *InvokeActionRQ) GetChannel() chan<- interface{} {
+	return m.callbackCh
 }
 
 type GetPropertyRQ struct {
-	Name string
+	callbackCh   chan<- interface{}
+	PropertyName string
 }
 
-type GetPropertyRS struct {
-	Value interface{}
+func (m *GetPropertyRQ) SetChannel(ch chan<- interface{}) {
+	m.callbackCh = ch
+}
+
+func (m *GetPropertyRQ) GetChannel() chan<- interface{} {
+	return m.callbackCh
 }
 
 type SetPropertyRQ struct {
-	Name  string
-	Value interface{}
+	callbackCh   chan<- interface{}
+	PropertyName string
+	Value        interface{}
+}
+
+func (m *SetPropertyRQ) SetChannel(ch chan<- interface{}) {
+	m.callbackCh = ch
+}
+
+func (m *SetPropertyRQ) GetChannel() chan<- interface{} {
+	return m.callbackCh
+}
+
+type Event struct {
+	EventName string
+	Payload   interface{}
 }

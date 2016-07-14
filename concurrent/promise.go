@@ -4,30 +4,31 @@ type Promise struct {
 	pch chan interface{}
 }
 
-func (prev *Promise) Then(stage func(response interface{}) interface{}) *Promise {
-	next := Promise{make(chan interface{})}
+func (p *Promise) Channel() chan<- interface{} {
+	return p.pch
+}
+
+func (prev *Promise) Then(callback func(response interface{}) interface{}) *Promise {
+	next := NewPromise()
 
 	go func() {
-		next.pch <- stage(<-prev.pch)
-		close(next.pch)
+		next.Channel() <- callback(<-prev.pch)
 	}()
 
-	return &next
+	return next
 }
 
-func (prev *Promise) End() {
-	<-prev.pch
+func NewPromise() *Promise {
+	return &Promise{
+		pch: make(chan interface{}),
+	}
 }
 
-func NewPromise(c chan interface{}) *Promise {
-	return &Promise{c}
-}
-
-func Calculate(stage func() interface{}) *Promise {
-	p := NewPromise(make(chan interface{}))
+func Async(callback func() interface{}) *Promise {
+	p := NewPromise()
 
 	go func() {
-		p.pch <- stage()
+		p.pch <- callback()
 	}()
 
 	return p

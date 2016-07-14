@@ -32,17 +32,12 @@ import (
 //     object       getDescription();
 // };
 type Server struct {
-	td *model.ThingDescription
-
-	invoke chan interface{}
-
-	notification chan interface{}
-
-	actions map[string]func(interface{}) interface{}
-
+	td         *model.ThingDescription
+	device     chan interface{}
+	publish    chan interface{}
+	actions    map[string]func(interface{}) interface{}
 	properties map[string]interface{}
-
-	events map[string]reflect.Type
+	events     map[string]reflect.Type
 }
 
 func (s *Server) Name() string {
@@ -50,34 +45,34 @@ func (s *Server) Name() string {
 }
 
 func (s *Server) InvokeAction(actionName string, parameter interface{}) *concurent.Promise {
-	c := make(chan interface{})
-	p := concurent.NewPromise(c)
-
-	s.send(&driver.InvokeActionRQ{
-		c,
-		actionName,
-		parameter,
+	return s.send(&driver.InvokeActionRQ{
+		ActionName: actionName,
+		Parameter:  parameter,
 	})
+}
 
+func (s *Server) GetProperty(propertyName string) *concurent.Promise {
+	return s.send(&driver.GetPropertyRQ{
+		PropertyName: propertyName,
+	})
+}
+
+func (s *Server) SetProperty(propertyName string, newValue interface{}) *concurent.Promise {
+	return s.send(&driver.SetPropertyRQ{
+		PropertyName: propertyName,
+		Value:        newValue,
+	})
+}
+
+//TODO: Unsure what is payload of promise in case of EmitEvent
+//Most probably EmitEvent is called by device to propagate events to clients
+func (s *Server) EmitEvent(eventName string, payload interface{}) *concurent.Promise {
+	e := &driver.Event{}
+
+	s.publish <- e
+
+	p := concurent.NewPromise()
 	return p
-}
-
-func (s *Server) send(message *driver.InvokeActionRQ) {
-	go func() {
-		s.invoke <- message
-	}()
-}
-
-func (s *Server) SetProperty(propertyName string, newValue interface{}) interface{} {
-	return nil
-}
-
-func (s *Server) GetProperty(propertyName string) interface{} {
-	return nil
-}
-
-func (s *Server) EmitEvent(eventName string, payload interface{}) interface{} {
-	return nil
 }
 
 func (s *Server) AddEvent(eventName string, payloadType reflect.Type) *Server {
@@ -126,11 +121,22 @@ func CreateFromDescriptionUri(uri string) *Server {
 
 func CreateFromDescription(td *model.ThingDescription) *Server {
 	return &Server{
-		td,
-		make(chan interface{}),
-		make(chan interface{}),
-		make(map[string]func(interface{}) interface{}),
-		make(map[string]interface{}),
-		make(map[string]reflect.Type),
+		td:         td,
+		device:     make(chan interface{}),
+		publish:    make(chan interface{}),
+		actions:    make(map[string]func(interface{}) interface{}),
+		properties: make(map[string]interface{}),
+		events:     make(map[string]reflect.Type),
 	}
+}
+
+func (s *Server) send(dch driver.Channel) *concurent.Promise {
+	p := concurent.NewPromise()
+	dch.SetChannel(p.Channel())
+
+	go func() {
+		s.device <- dch
+	}()
+
+	return p
 }
