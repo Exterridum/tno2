@@ -136,12 +136,12 @@ func CreateFromDescription(td *model.ThingDescription) *Server {
 	}
 }
 
-func (s *Server) send(dch driver.Channel) *concurent.Promise {
+func (s *Server) send(message driver.Message) *concurent.Promise {
 	p := concurent.NewPromise()
-	dch.SetChannel(p.Channel())
+	message.SetChannel(p.Channel())
 
 	go func() {
-		s.device <- dch
+		s.device <- message
 	}()
 
 	return p

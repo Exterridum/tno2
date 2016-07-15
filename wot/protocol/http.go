@@ -13,40 +13,42 @@ import (
 	"github.com/gorilla/mux"
 )
 
+//Based on http://thenewstack.io/make-a-restful-json-api-go/
+
 var store = make(map[string]interface{})
 
-//http://thenewstack.io/make-a-restful-json-api-go/
 type ProtoHttp struct {
-	port   int
-	router *mux.Router
-	hrefs  []string
+	port    int
+	router  *mux.Router
+	hrefs   []string
+	servers map[string]*wot.Server
 }
 
 type route struct {
-	Name        string
-	Method      string
-	Pattern     string
-	HandlerFunc http.HandlerFunc
+	name        string
+	method      string
+	pattern     string
+	handlerFunc http.HandlerFunc
 }
+
+// ----- Server API methods
 
 func Http(port int) *ProtoHttp {
 	// r.PathPrefix("/model").HandlerFunc(Model)
 	return &ProtoHttp{
-		port,
-		mux.NewRouter().StrictSlash(true),
-		make([]string, 0),
+		port:    port,
+		router:  mux.NewRouter().StrictSlash(true),
+		hrefs:   make([]string, 0),
+		servers: make(map[string]*wot.Server),
 	}
 }
 
 func (p *ProtoHttp) Bind(ctxPath string, s *wot.Server) {
 	td := s.GetDescription()
+	p.servers[ctxPath] = s
+	p.createRoutes(ctxPath, td)
+	//Update TD uris by created protocol bind
 	td.Uris = append(td.Uris, Concat("http://localhost:8080", ctxPath))
-
-	routes := createRoutes(td)
-
-	for _, route := range routes {
-		p.append(ctxPath, route)
-	}
 }
 
 func (p *ProtoHttp) Start() {
@@ -54,7 +56,9 @@ func (p *ProtoHttp) Start() {
 	log.Fatal(http.ListenAndServe(port, p.router))
 }
 
-func createRoutes(td *model.ThingDescription) []*route {
+// ----- ThingDescription parser methods
+
+func (p *ProtoHttp) createRoutes(ctxPath string, td *model.ThingDescription) {
 	var routes []*route
 	routes = make([]*route, 0)
 
@@ -65,23 +69,25 @@ func createRoutes(td *model.ThingDescription) []*route {
 		routes = append(routes, path)
 	}
 
-	return routes
+	for _, route := range routes {
+		p.addRoute(ctxPath, route)
+	}
 }
 
-func (p *ProtoHttp) append(ctxPath string, route *route) {
+func (p *ProtoHttp) addRoute(ctxPath string, route *route) {
 	p.router.
-		Methods(route.Method).
-		Path(Concat(ctxPath, "/", route.Pattern)).
-		Name(route.Name).
-		Handler(route.HandlerFunc)
+		Methods(route.method).
+		Path(Concat(ctxPath, "/", route.pattern)).
+		Name(route.name).
+		Handler(route.handlerFunc)
 }
 
 func rootPath(td *model.ThingDescription) *route {
 	return &route{
-		"Index",
-		"GET",
-		"",
-		func(w http.ResponseWriter, r *http.Request) {
+		name:    "Index",
+		method:  "GET",
+		pattern: "",
+		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "Device information for -> %s", td.Name)
 		},
 	}
@@ -89,10 +95,10 @@ func rootPath(td *model.ThingDescription) *route {
 
 func descriptionPath(td *model.ThingDescription) *route {
 	return &route{
-		"model",
-		"GET",
-		"description",
-		func(w http.ResponseWriter, r *http.Request) {
+		name:    "model",
+		method:  "GET",
+		pattern: "description",
+		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			createResponse(w, td)
 		},
 	}
@@ -117,10 +123,10 @@ func getPropertyPath(prop *model.Property) *route {
 	e := Encoder(prop)
 
 	return &route{
-		prop.Hrefs[0],
-		"GET",
-		prop.Hrefs[0],
-		func(w http.ResponseWriter, r *http.Request) {
+		name:    prop.Hrefs[0],
+		method:  "GET",
+		pattern: prop.Hrefs[0],
+		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			createResponse(w, e(store[prop.Hrefs[0]]))
 		},
 	}
@@ -130,10 +136,10 @@ func setPropertyPath(prop *model.Property) *route {
 	d := Decoder(prop)
 
 	return &route{
-		prop.Hrefs[0],
-		"PUT",
-		prop.Hrefs[0],
-		func(w http.ResponseWriter, r *http.Request) {
+		name:    prop.Hrefs[0],
+		method:  "PUT",
+		pattern: prop.Hrefs[0],
+		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			store[prop.Hrefs[0]] = d(r.Body)
 		},
 	}

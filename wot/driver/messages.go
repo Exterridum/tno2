@@ -1,6 +1,6 @@
 package driver
 
-type Channel interface {
+type Message interface {
 	SetChannel(ch chan<- interface{})
 	GetChannel() chan<- interface{}
 }
