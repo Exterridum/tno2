@@ -33,17 +33,34 @@ import (
 // };
 type Server struct {
 	td         *model.ThingDescription
-	device     chan interface{}
-	publish    chan interface{}
+	pubCh      chan<- interface{}
 	actions    map[string]func(interface{}) interface{}
 	properties map[string]interface{}
 	events     map[string]reflect.Type
-	driver     driver.Driver
+	adapter    *driver.Adapter
 }
 
-func (s *Server) Bind(d driver.Driver) {
-	s.driver = d
-	d.SetInputChannel(s.device)
+func CreateThing(name string) *Server {
+	return nil
+}
+
+func CreateFromDescriptionUri(uri string) *Server {
+	return CreateFromDescription(model.Create(uri))
+}
+
+func CreateFromDescription(td *model.ThingDescription) *Server {
+	return &Server{
+		td:         td,
+		pubCh:      make(chan interface{}),
+		actions:    make(map[string]func(interface{}) interface{}),
+		properties: make(map[string]interface{}),
+		events:     make(map[string]reflect.Type),
+	}
+}
+
+func (s *Server) BindSync(d driver.Driver, initParams map[string]interface{}) {
+	s.adapter = driver.NewAdapter(d)
+	d.Init(initParams, s)
 }
 
 func (s *Server) Name() string {
@@ -51,20 +68,20 @@ func (s *Server) Name() string {
 }
 
 func (s *Server) InvokeAction(actionName string, parameter interface{}) *concurent.Promise {
-	return s.send(&driver.InvokeActionRQ{
+	return s.adapter.Send(&driver.InvokeActionRQ{
 		ActionName: actionName,
 		Parameter:  parameter,
 	})
 }
 
 func (s *Server) GetProperty(propertyName string) *concurent.Promise {
-	return s.send(&driver.GetPropertyRQ{
+	return s.adapter.Send(&driver.GetPropertyRQ{
 		PropertyName: propertyName,
 	})
 }
 
 func (s *Server) SetProperty(propertyName string, newValue interface{}) *concurent.Promise {
-	return s.send(&driver.SetPropertyRQ{
+	return s.adapter.Send(&driver.SetPropertyRQ{
 		PropertyName: propertyName,
 		Value:        newValue,
 	})
@@ -75,7 +92,7 @@ func (s *Server) SetProperty(propertyName string, newValue interface{}) *concure
 func (s *Server) EmitEvent(eventName string, payload interface{}) *concurent.Promise {
 	e := &driver.Event{}
 
-	s.publish <- e
+	s.pubCh <- e
 
 	p := concurent.NewPromise()
 	return p
@@ -115,34 +132,4 @@ func (s *Server) RemoveAllListeners(eventName string) *Server {
 
 func (s *Server) GetDescription() *model.ThingDescription {
 	return s.td
-}
-
-func CreateThing(name string) *Server {
-	return nil
-}
-
-func CreateFromDescriptionUri(uri string) *Server {
-	return CreateFromDescription(model.Create(uri))
-}
-
-func CreateFromDescription(td *model.ThingDescription) *Server {
-	return &Server{
-		td:         td,
-		device:     make(chan interface{}),
-		publish:    make(chan interface{}),
-		actions:    make(map[string]func(interface{}) interface{}),
-		properties: make(map[string]interface{}),
-		events:     make(map[string]reflect.Type),
-	}
-}
-
-func (s *Server) send(message driver.Message) *concurent.Promise {
-	p := concurent.NewPromise()
-	message.SetChannel(p.Channel())
-
-	go func() {
-		s.device <- message
-	}()
-
-	return p
 }

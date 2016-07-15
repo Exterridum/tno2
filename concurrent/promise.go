@@ -18,6 +18,10 @@ func (prev *Promise) Then(callback func(response interface{}) interface{}) *Prom
 	return next
 }
 
+func (prev *Promise) Wait() interface{} {
+	return <-prev.pch
+}
+
 func NewPromise() *Promise {
 	return &Promise{
 		pch: make(chan interface{}),
