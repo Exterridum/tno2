@@ -3,7 +3,7 @@ package wot
 import (
 	"reflect"
 
-	"github.com/conas/tno2/concurrent"
+	"github.com/conas/tno2/util/concurrent"
 	"github.com/conas/tno2/wot/driver"
 	"github.com/conas/tno2/wot/model"
 )

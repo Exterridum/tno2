@@ -1,6 +1,6 @@
 package driver
 
-import "github.com/conas/tno2/concurrent"
+import "github.com/conas/tno2/util/concurrent"
 
 type Driver interface {
 	Init(initParams map[string]interface{}, eventEmiter EventEmiter)
