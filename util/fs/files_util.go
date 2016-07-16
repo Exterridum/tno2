@@ -1,4 +1,4 @@
-package files
+package fs
 
 // func loadModels(r *mux.Router) {
 // 	files, err := ioutil.ReadDir("models")

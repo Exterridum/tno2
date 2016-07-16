@@ -3,7 +3,7 @@ package model
 import "testing"
 
 func TestCase1(t *testing.T) {
-	model := Load("file://testdata/case-1.json")
+	model := Create("file://testdata/case-proprerty-001.json")
 	Equals(t, "Thing", model.AT_Type)
 }
 

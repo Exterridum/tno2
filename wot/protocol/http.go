@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/conas/tno2/util/strings"
+	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot"
 	"github.com/conas/tno2/wot/model"
 	"github.com/gorilla/mux"
@@ -46,11 +46,11 @@ func (p *Http) Bind(ctxPath string, s *wot.Server) {
 	p.servers[ctxPath] = s
 	p.createRoutes(ctxPath, td)
 	//Update TD uris by created protocol bind
-	td.Uris = append(td.Uris, strings.Concat("http://localhost:8080", ctxPath))
+	td.Uris = append(td.Uris, str.Concat("http://localhost:8080", ctxPath))
 }
 
 func (p *Http) Start() {
-	port := strings.Concat(":", strconv.Itoa(p.port))
+	port := str.Concat(":", strconv.Itoa(p.port))
 	log.Fatal(http.ListenAndServe(port, p.router))
 }
 
@@ -148,7 +148,7 @@ func (p *Http) setPropertyPath(ctxPath string, prop *model.Property) *route {
 }
 
 func contextPath(ctxPath, element string) string {
-	return strings.Concat(ctxPath, "/", element)
+	return str.Concat(ctxPath, "/", element)
 }
 
 func createResponse(w http.ResponseWriter, payload interface{}) {
