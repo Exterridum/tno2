@@ -1,2 +1,6 @@
 Q1: Incase of multiple protocols present in TD, how client specifies which protocol to use for communication with client
-Q2: the way property is described in TD is differnt than that in JSONSchema 
+Q2: The way property is described in TD is differnt than that in JSONSchema
+Q3: In http://w3c.github.io/wot/current-practices/wot-practices.html unit property is defined within some namespace "sensor:unit", "actuator:unit". Do we need to hane unit property namespace aware 
+    or could we have unit property to be generic property name and only its value would be namespace specific?
+Q4: When action is invoked task subresourse is returned. Task subresource shows task progress. It is unclear when output value is retrieved. So far task subresource will be updated witj completed and output tag. Task resource 
+    will be deleted as soon as get request on completed task subresource is accepted     
