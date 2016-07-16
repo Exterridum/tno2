@@ -1,13 +1,50 @@
 package wot
 
 import (
-	"reflect"
-
 	"github.com/conas/tno2/util/concurrent"
-	"github.com/conas/tno2/wot/driver"
 	"github.com/conas/tno2/wot/model"
 )
 
+//TODO: So far only one listener is supported per event
+
+type Server struct {
+	pubCh chan<- interface{}
+	td    *model.ThingDescription
+
+	propGetCB map[string]func() interface{}
+	propSetCB map[string]func(interface{}) interface{}
+	actionCB  map[string]func(interface{}) interface{}
+	eventsCB  map[string]func(interface{})
+}
+
+type Driver interface {
+	Init(initParams map[string]interface{}, s *Server)
+}
+
+func CreateThing(name string) *Server {
+	return nil
+}
+
+func CreateFromDescriptionUri(uri string) *Server {
+	return CreateFromDescription(model.Create(uri))
+}
+
+func CreateFromDescription(td *model.ThingDescription) *Server {
+	return &Server{
+		td:        td,
+		pubCh:     make(chan interface{}),
+		propGetCB: make(map[string]func() interface{}),
+		propSetCB: make(map[string]func(interface{}) interface{}),
+		actionCB:  make(map[string]func(interface{}) interface{}),
+		eventsCB:  make(map[string]func(interface{})),
+	}
+}
+
+func (s *Server) ConnectSync(d Driver, initParams map[string]interface{}) {
+	d.Init(initParams, s)
+}
+
+// ----- AS DEFINED BY WEB IDL
 // https://github.com/w3c/wot/tree/master/proposals/restructured-scripting-api#exposedthing
 //
 // WebIDL
@@ -31,105 +68,82 @@ import (
 //     ExposedThing removeAllListeners(DOMString eventName);
 //     object       getDescription();
 // };
-type Server struct {
-	td         *model.ThingDescription
-	pubCh      chan<- interface{}
-	actions    map[string]func(interface{}) interface{}
-	properties map[string]interface{}
-	events     map[string]reflect.Type
-	adapter    *driver.Adapter
-}
-
-func CreateThing(name string) *Server {
-	return nil
-}
-
-func CreateFromDescriptionUri(uri string) *Server {
-	return CreateFromDescription(model.Create(uri))
-}
-
-func CreateFromDescription(td *model.ThingDescription) *Server {
-	return &Server{
-		td:         td,
-		pubCh:      make(chan interface{}),
-		actions:    make(map[string]func(interface{}) interface{}),
-		properties: make(map[string]interface{}),
-		events:     make(map[string]reflect.Type),
-	}
-}
-
-func (s *Server) BindSync(d driver.Driver, initParams map[string]interface{}) {
-	s.adapter = driver.NewAdapter(d)
-	d.Init(initParams, s)
-}
-
 func (s *Server) Name() string {
 	return s.td.Name
 }
 
-func (s *Server) InvokeAction(actionName string, parameter interface{}) *concurent.Promise {
-	return s.adapter.Send(&driver.InvokeActionRQ{
-		ActionName: actionName,
-		Parameter:  parameter,
-	})
+func (s *Server) GetDescription() *model.ThingDescription {
+	return s.td
 }
 
-func (s *Server) GetProperty(propertyName string) *concurent.Promise {
-	return s.adapter.Send(&driver.GetPropertyRQ{
-		PropertyName: propertyName,
-	})
-}
+// ----- PROPERTIES HANDLING
 
-func (s *Server) SetProperty(propertyName string, newValue interface{}) *concurent.Promise {
-	return s.adapter.Send(&driver.SetPropertyRQ{
-		PropertyName: propertyName,
-		Value:        newValue,
-	})
-}
-
-//TODO: Unsure what is payload of promise in case of EmitEvent
-//Most probably EmitEvent is called by device to propagate events to clients
-func (s *Server) EmitEvent(eventName string, payload interface{}) *concurent.Promise {
-	e := &driver.Event{}
-
-	s.pubCh <- e
-
-	p := concurent.NewPromise()
-	return p
-}
-
-func (s *Server) AddEvent(eventName string, payloadType reflect.Type) *Server {
-	return nil
-}
-
-func (s *Server) AddAction(actionName string, inputType interface{}, outputType interface{}) *Server {
-	return nil
-}
-
-func (s *Server) AddProperty(propertyName string, contentType reflect.Type) *Server {
-	return nil
-}
-
-func (s *Server) OnInvokeAction(actionName string, callback func(interface{}) interface{}) *Server {
-	return nil
+func (s *Server) AddProperty(propertyName string, property interface{}) *Server {
+	//Should we update TD
+	panic("Add property not implemented!")
 }
 
 func (s *Server) OnUpdateProperty(propertyName string, callback func(interface{}) interface{}) *Server {
-	return nil
+	s.propSetCB[propertyName] = callback
+	return s
 }
 
-func (s *Server) AddListener(eventName string, listener EventListener) *Server {
-	return nil
+func (s *Server) OnGetProperty(propertyName string, callback func() interface{}) *Server {
+	s.propGetCB[propertyName] = callback
+	return s
 }
 
-func (s *Server) RemoveListener(eventName string, listener EventListener) *Server {
-	return nil
+func (s *Server) GetProperty(propertyName string) *concurent.Promise {
+	return concurent.Async(s.propGetCB[propertyName])
+}
+
+func (s *Server) SetProperty(propertyName string, newValue interface{}) *concurent.Promise {
+	return concurent.Async(func() interface{} {
+		return s.propSetCB[propertyName](newValue)
+	})
+}
+
+// ----- ACTIONS HANDLING
+
+func (s *Server) AddAction(actionName string, inputType interface{}, outputType interface{}) *Server {
+	panic("Add action not implemented!")
+}
+
+func (s *Server) OnInvokeAction(actionName string, callback func(interface{}) interface{}) *Server {
+	s.actionCB[actionName] = callback
+	return s
+}
+
+func (s *Server) InvokeAction(actionName string, parameter interface{}) *concurent.Promise {
+	return concurent.Async(func() interface{} {
+		return s.actionCB[actionName](parameter)
+	})
+}
+
+// ----- EVENTS HANDLING
+
+func (s *Server) AddEvent(eventName string, payloadType interface{}) *Server {
+	panic("Add event not implemented!")
+}
+
+func (s *Server) AddListener(eventName string, listener func(interface{})) *Server {
+	s.eventsCB[eventName] = listener
+	return s
+}
+
+func (s *Server) RemoveListener(eventName string, listener func(interface{})) *Server {
+	delete(s.eventsCB, eventName)
+	return s
 }
 
 func (s *Server) RemoveAllListeners(eventName string) *Server {
-	return nil
+	delete(s.eventsCB, eventName)
+	return s
 }
 
-func (s *Server) GetDescription() *model.ThingDescription {
-	return s.td
+func (s *Server) EmitEvent(eventName string, payload interface{}) *concurent.Promise {
+	return concurent.Async(func() interface{} {
+		s.eventsCB[eventName](payload)
+		return nil
+	})
 }

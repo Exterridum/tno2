@@ -2,9 +2,6 @@ package wot
 
 import "github.com/conas/tno2/wot/model"
 
-type EventListener struct {
-}
-
 // https://github.com/w3c/wot/tree/master/proposals/restructured-scripting-api#consumedthing
 //
 // WebIDL
@@ -28,9 +25,9 @@ type Client interface {
 
 	GetProperty(propertyName string) interface{}
 
-	AddListener(eventName string, listener EventListener) *Client
+	AddListener(eventName string, listener func(interface{})) *Client
 
-	RemoveListener(eventName string, listener EventListener) *Client
+	RemoveListener(eventName string, listener func(interface{})) *Client
 
 	RemoveAllListeners(eventName string) *Client
 

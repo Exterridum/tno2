@@ -19,7 +19,7 @@ func bindSyncModels(http *protocol.Http) {
 	for _, model := range models {
 		server := wot.CreateFromDescriptionUri(modelURI(model))
 		driver := NewTestDriver()
-		server.BindSync(driver, make(map[string]interface{}))
+		server.ConnectSync(driver, make(map[string]interface{}))
 		http.Bind(str.Concat("/", model), server)
 	}
 }
