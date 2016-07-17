@@ -12,8 +12,8 @@ type Server struct {
 	td    *model.ThingDescription
 
 	propGetCB map[string]func() interface{}
-	propSetCB map[string]func(interface{}) interface{}
-	actionCB  map[string]func(interface{}) interface{}
+	propSetCB map[string]func(interface{})
+	actionCB  map[string]func(interface{})
 	eventsCB  map[string]func(interface{})
 }
 
@@ -34,8 +34,8 @@ func CreateFromDescription(td *model.ThingDescription) *Server {
 		td:        td,
 		pubCh:     make(chan interface{}),
 		propGetCB: make(map[string]func() interface{}),
-		propSetCB: make(map[string]func(interface{}) interface{}),
-		actionCB:  make(map[string]func(interface{}) interface{}),
+		propSetCB: make(map[string]func(interface{})),
+		actionCB:  make(map[string]func(interface{})),
 		eventsCB:  make(map[string]func(interface{})),
 	}
 }
@@ -83,8 +83,8 @@ func (s *Server) AddProperty(propertyName string, property interface{}) *Server 
 	panic("Add property not implemented!")
 }
 
-func (s *Server) OnUpdateProperty(propertyName string, callback func(interface{}) interface{}) *Server {
-	s.propSetCB[propertyName] = callback
+func (s *Server) OnUpdateProperty(propertyName string, propUpdateListener func(newValue interface{})) *Server {
+	s.propSetCB[propertyName] = propUpdateListener
 	return s
 }
 
@@ -99,7 +99,8 @@ func (s *Server) GetProperty(propertyName string) *concurent.Promise {
 
 func (s *Server) SetProperty(propertyName string, newValue interface{}) *concurent.Promise {
 	return concurent.Async(func() interface{} {
-		return s.propSetCB[propertyName](newValue)
+		s.propSetCB[propertyName](newValue)
+		return nil
 	})
 }
 
@@ -109,14 +110,15 @@ func (s *Server) AddAction(actionName string, inputType interface{}, outputType 
 	panic("Add action not implemented!")
 }
 
-func (s *Server) OnInvokeAction(actionName string, callback func(interface{}) interface{}) *Server {
-	s.actionCB[actionName] = callback
+func (s *Server) OnInvokeAction(actionName string, actionHandler func(arg interface{})) *Server {
+	s.actionCB[actionName] = actionHandler
 	return s
 }
 
-func (s *Server) InvokeAction(actionName string, parameter interface{}) *concurent.Promise {
+func (s *Server) InvokeAction(actionName string, arg interface{}) *concurent.Promise {
 	return concurent.Async(func() interface{} {
-		return s.actionCB[actionName](parameter)
+		s.actionCB[actionName](arg)
+		return nil
 	})
 }
 

@@ -1,7 +1,11 @@
 package concurent
 
 type Promise struct {
-	pch chan interface{}
+	pch    chan interface{}
+	status Status
+}
+
+type Status struct {
 }
 
 func (p *Promise) Channel() chan<- interface{} {
@@ -19,6 +23,10 @@ func (prev *Promise) Then(callback func(response interface{}) interface{}) *Prom
 }
 
 func (prev *Promise) Wait() interface{} {
+	return <-prev.pch
+}
+
+func (prev *Promise) Status() interface{} {
 	return <-prev.pch
 }
 
