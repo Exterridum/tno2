@@ -1,6 +1,8 @@
 package wot
 
 import (
+	"log"
+
 	"github.com/conas/tno2/util/concurrent"
 	"github.com/conas/tno2/wot/model"
 )
@@ -13,7 +15,7 @@ type Server struct {
 
 	propGetCB map[string]func() interface{}
 	propSetCB map[string]func(interface{})
-	actionCB  map[string]func(interface{})
+	actionCB  map[string]func(interface{}, concurent.StatusHandler)
 	eventsCB  map[string]func(interface{})
 }
 
@@ -35,7 +37,7 @@ func CreateFromDescription(td *model.ThingDescription) *Server {
 		pubCh:     make(chan interface{}),
 		propGetCB: make(map[string]func() interface{}),
 		propSetCB: make(map[string]func(interface{})),
-		actionCB:  make(map[string]func(interface{})),
+		actionCB:  make(map[string]func(interface{}, concurent.StatusHandler)),
 		eventsCB:  make(map[string]func(interface{})),
 	}
 }
@@ -78,30 +80,51 @@ func (s *Server) GetDescription() *model.ThingDescription {
 
 // ----- PROPERTIES HANDLING
 
+type RETURN_CODES int
+
+const (
+	OK RETURN_CODES = iota
+	UNKNOWN_PROPERTY
+)
+
 func (s *Server) AddProperty(propertyName string, property interface{}) *Server {
 	//Should we update TD
 	panic("Add property not implemented!")
 }
 
 func (s *Server) OnUpdateProperty(propertyName string, propUpdateListener func(newValue interface{})) *Server {
+	log.Print("Server -> ", s.GetDescription().Name, " OnUpdateProperty propertyName: ", propertyName)
 	s.propSetCB[propertyName] = propUpdateListener
 	return s
 }
 
-func (s *Server) OnGetProperty(propertyName string, callback func() interface{}) *Server {
-	s.propGetCB[propertyName] = callback
+func (s *Server) OnGetProperty(propertyName string, propertyRetriever func() interface{}) *Server {
+	log.Print("Server -> ", s.GetDescription().Name, " OnGetProperty propertyName: ", propertyName)
+	s.propGetCB[propertyName] = propertyRetriever
 	return s
 }
 
-func (s *Server) GetProperty(propertyName string) *concurent.Promise {
-	return concurent.Async(s.propGetCB[propertyName])
+func (s *Server) GetProperty(propertyName string) (*concurent.Promise, RETURN_CODES) {
+	cb, ok := s.propGetCB[propertyName]
+
+	if ok {
+		return concurent.Async(cb), OK
+	} else {
+		return nil, UNKNOWN_PROPERTY
+	}
 }
 
-func (s *Server) SetProperty(propertyName string, newValue interface{}) *concurent.Promise {
-	return concurent.Async(func() interface{} {
-		s.propSetCB[propertyName](newValue)
-		return nil
-	})
+func (s *Server) SetProperty(propertyName string, newValue interface{}) (*concurent.Promise, RETURN_CODES) {
+	cb, ok := s.propSetCB[propertyName]
+
+	if ok {
+		return concurent.Async(func() interface{} {
+			cb(newValue)
+			return nil
+		}), OK
+	} else {
+		return nil, UNKNOWN_PROPERTY
+	}
 }
 
 // ----- ACTIONS HANDLING
@@ -110,16 +133,27 @@ func (s *Server) AddAction(actionName string, inputType interface{}, outputType 
 	panic("Add action not implemented!")
 }
 
-func (s *Server) OnInvokeAction(actionName string, actionHandler func(arg interface{})) *Server {
+func (s *Server) OnInvokeAction(
+	actionName string,
+	actionHandler func(interface{}, concurent.StatusHandler)) *Server {
+
 	s.actionCB[actionName] = actionHandler
 	return s
 }
 
-func (s *Server) InvokeAction(actionName string, arg interface{}) *concurent.Promise {
-	return concurent.Async(func() interface{} {
-		s.actionCB[actionName](arg)
-		return nil
-	})
+func (s *Server) InvokeAction(
+	actionName string,
+	arg interface{},
+	statusHandler concurent.StatusHandler) *concurent.StatusPromise {
+
+	actionHandler := s.actionCB[actionName]
+
+	return concurent.AsyncStatus(
+		func(*concurent.StatusHandler) interface{} {
+			actionHandler(arg, statusHandler)
+			return nil
+		},
+		statusHandler)
 }
 
 // ----- EVENTS HANDLING

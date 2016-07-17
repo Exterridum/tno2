@@ -1,12 +1,15 @@
 package str
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+)
 
-func Concat(strings ...string) string {
+func Concat(args ...interface{}) string {
 	var buffer bytes.Buffer
 
-	for _, str := range strings {
-		buffer.WriteString(str)
+	for _, a := range args {
+		buffer.WriteString(fmt.Sprintf("%v", a))
 	}
 
 	return buffer.String()

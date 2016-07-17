@@ -1,6 +1,12 @@
 package main
 
-import "github.com/conas/tno2/wot"
+import (
+	"log"
+
+	"github.com/conas/tno2/util/concurrent"
+	"github.com/conas/tno2/util/str"
+	"github.com/conas/tno2/wot"
+)
 
 type TestDriver struct {
 	datastore map[string]interface{}
@@ -13,12 +19,14 @@ func NewTestDriver() *TestDriver {
 }
 
 func (d *TestDriver) Init(initParams map[string]interface{}, s *wot.Server) {
+	log.Println("TestDriver -> initializing server ->", s.GetDescription().Name)
 	d.addPropsHandlers(s)
 	d.addActionsHandlers(s)
 }
 
 func (d *TestDriver) addPropsHandlers(s *wot.Server) {
 	for _, p := range s.GetDescription().Properties {
+		log.Print("TestDriver -> found property: ", p.Name, ", writable:", p.Writable)
 		s.OnGetProperty(p.Name, d.getPropertyHandler(p.Name))
 
 		if p.Writable {
@@ -45,8 +53,12 @@ func (d *TestDriver) addActionsHandlers(s *wot.Server) {
 	}
 }
 
-func (d *TestDriver) longRunningAction(name string) func(arg interface{}) {
-	return func(arg interface{}) {
+func (d *TestDriver) longRunningAction(name string) func(arg interface{}, statusHandler concurent.StatusHandler) {
+	return func(arg interface{}, statusHandler concurent.StatusHandler) {
+		for i := 0; i < 10; i++ {
+			statusHandler(i, str.Concat("Action -> ", name, ", Progress -> ", i*10, "%"))
+		}
 
+		statusHandler(100, "Action done.")
 	}
 }

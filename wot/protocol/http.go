@@ -97,7 +97,7 @@ func (p *Http) descriptionPath(ctxPath string, td *model.ThingDescription) *rout
 		method:  "GET",
 		pattern: contextPath(ctxPath, "description"),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			createResponse(w, td)
+			ok(w, td)
 		},
 	}
 }
@@ -121,13 +121,19 @@ func (p *Http) getPropertyPath(ctxPath string, prop *model.Property) *route {
 	e := Encoder(prop)
 
 	return &route{
-		name:    prop.Hrefs[0],
+		name:    prop.Name,
 		method:  "GET",
-		pattern: contextPath(ctxPath, prop.Hrefs[0]),
+		pattern: contextPath(ctxPath, prop.Name),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			name := prop.Hrefs[0]
-			value := p.servers[ctxPath].GetProperty(name).Wait()
-			createResponse(w, e(value))
+			name := prop.Name
+			promise, rc := p.servers[ctxPath].GetProperty(name)
+
+			if rc == wot.OK {
+				value := promise.Wait()
+				ok(w, e(value))
+			} else {
+				error(w, "Unknown property.")
+			}
 		},
 	}
 }
@@ -136,13 +142,19 @@ func (p *Http) setPropertyPath(ctxPath string, prop *model.Property) *route {
 	d := Decoder(prop)
 
 	return &route{
-		name:    prop.Hrefs[0],
+		name:    prop.Name,
 		method:  "PUT",
-		pattern: contextPath(ctxPath, prop.Hrefs[0]),
+		pattern: contextPath(ctxPath, prop.Name),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			name := prop.Hrefs[0]
+			name := prop.Name
 			value := d(r.Body)
-			p.servers[ctxPath].SetProperty(name, value).Wait()
+			promise, rc := p.servers[ctxPath].SetProperty(name, value)
+
+			if rc == wot.OK {
+				promise.Wait()
+			} else {
+				error(w, "Unknown property.")
+			}
 		},
 	}
 }
@@ -151,7 +163,12 @@ func contextPath(ctxPath, element string) string {
 	return str.Concat(ctxPath, "/", element)
 }
 
-func createResponse(w http.ResponseWriter, payload interface{}) {
+func ok(w http.ResponseWriter, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(payload)
+}
+
+func error(w http.ResponseWriter, payload interface{}) {
+	w.Header().Set("Content-Type", "text/plain")
 	json.NewEncoder(w).Encode(payload)
 }
