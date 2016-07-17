@@ -79,3 +79,7 @@ func (prev *StatusPromise) Then(callback func(interface{}, *StatusHandler) inter
 
 	return next
 }
+
+func (prev *StatusPromise) Wait() interface{} {
+	return <-prev.pch
+}

@@ -1,0 +1,29 @@
+{
+  "@context": [
+    "http://w3c.github.io/wot/w3c-wot-td-context.jsonld"
+  ],
+  "@type": "Thing",
+  "name": "Simple-Action",
+  "uris": [
+    "coap://mytemp.example.com:5683/"
+  ],
+  "encodings": [
+    "JSON"
+  ],
+  "actions": [
+    {
+      "@type": "actuator:fadeIn",
+      "name": "fadeIn",
+      "inputData": {
+        "valueType": {
+          "type": "integer"
+        },
+        "actuator:unit": "actuator:ms"
+      },
+      "hrefs": [
+        "in",
+        "myled/in"
+      ]
+    }
+  ]
+}

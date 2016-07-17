@@ -23,6 +23,14 @@ type Driver interface {
 	Init(initParams map[string]interface{}, s *Server)
 }
 
+type RETURN_CODE int
+
+const (
+	OK RETURN_CODE = iota
+	UNKNOWN_PROPERTY
+	UNKNOWN_ACTION
+)
+
 func CreateThing(name string) *Server {
 	return nil
 }
@@ -44,6 +52,28 @@ func CreateFromDescription(td *model.ThingDescription) *Server {
 
 func (s *Server) ConnectSync(d Driver, initParams map[string]interface{}) {
 	d.Init(initParams, s)
+}
+
+//FIXME: Create model metadata with map
+func (s *Server) propertyExists(name string) bool {
+	for _, p := range s.GetDescription().Properties {
+		if p.Name == name {
+			return true
+		}
+	}
+
+	return false
+}
+
+//FIXME: Create model metadata with map
+func (s *Server) actionExists(name string) bool {
+	for _, a := range s.GetDescription().Actions {
+		if a.Name == name {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ----- AS DEFINED BY WEB IDL
@@ -80,13 +110,6 @@ func (s *Server) GetDescription() *model.ThingDescription {
 
 // ----- PROPERTIES HANDLING
 
-type RETURN_CODES int
-
-const (
-	OK RETURN_CODES = iota
-	UNKNOWN_PROPERTY
-)
-
 func (s *Server) AddProperty(propertyName string, property interface{}) *Server {
 	//Should we update TD
 	panic("Add property not implemented!")
@@ -104,7 +127,7 @@ func (s *Server) OnGetProperty(propertyName string, propertyRetriever func() int
 	return s
 }
 
-func (s *Server) GetProperty(propertyName string) (*concurent.Promise, RETURN_CODES) {
+func (s *Server) GetProperty(propertyName string) (*concurent.Promise, RETURN_CODE) {
 	cb, ok := s.propGetCB[propertyName]
 
 	if ok {
@@ -114,7 +137,7 @@ func (s *Server) GetProperty(propertyName string) (*concurent.Promise, RETURN_CO
 	}
 }
 
-func (s *Server) SetProperty(propertyName string, newValue interface{}) (*concurent.Promise, RETURN_CODES) {
+func (s *Server) SetProperty(propertyName string, newValue interface{}) (*concurent.Promise, RETURN_CODE) {
 	cb, ok := s.propSetCB[propertyName]
 
 	if ok {
@@ -136,6 +159,7 @@ func (s *Server) AddAction(actionName string, inputType interface{}, outputType 
 func (s *Server) OnInvokeAction(
 	actionName string,
 	actionHandler func(interface{}, concurent.StatusHandler)) *Server {
+	log.Print("Server -> ", s.GetDescription().Name, " OnInvokeAction actionName: ", actionName)
 
 	s.actionCB[actionName] = actionHandler
 	return s
@@ -144,16 +168,20 @@ func (s *Server) OnInvokeAction(
 func (s *Server) InvokeAction(
 	actionName string,
 	arg interface{},
-	statusHandler concurent.StatusHandler) *concurent.StatusPromise {
+	statusHandler concurent.StatusHandler) (*concurent.StatusPromise, RETURN_CODE) {
 
-	actionHandler := s.actionCB[actionName]
+	actionHandler, ok := s.actionCB[actionName]
 
-	return concurent.AsyncStatus(
-		func(*concurent.StatusHandler) interface{} {
-			actionHandler(arg, statusHandler)
-			return nil
-		},
-		statusHandler)
+	if ok {
+		return concurent.AsyncStatus(
+			func(*concurent.StatusHandler) interface{} {
+				actionHandler(arg, statusHandler)
+				return nil
+			},
+			statusHandler), OK
+	} else {
+		return nil, UNKNOWN_ACTION
+	}
 }
 
 // ----- EVENTS HANDLING

@@ -7,7 +7,7 @@ import (
 )
 
 var modelPrefix = "file://../../model/testdata/"
-var models = []string{"case-property-001"}
+var models = []string{"case-property-001", "case-action-001"}
 
 func main() {
 	http := protocol.NewHttp(8080)

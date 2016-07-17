@@ -1,8 +1,10 @@
 package protocol
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -64,6 +66,10 @@ func (p *Http) createRoutes(ctxPath string, td *model.ThingDescription) {
 	routes = append(routes, p.descriptionPath(ctxPath, td))
 
 	for _, path := range p.propertiesPath(ctxPath, td) {
+		routes = append(routes, path)
+	}
+
+	for _, path := range p.actionsPath(ctxPath, td) {
 		routes = append(routes, path)
 	}
 
@@ -157,6 +163,85 @@ func (p *Http) setPropertyPath(ctxPath string, prop *model.Property) *route {
 			}
 		},
 	}
+}
+
+type Slot struct {
+	data map[string]interface{}
+}
+
+func (p *Http) actionsPath(ctxPath string, td *model.ThingDescription) []*route {
+	var routes []*route
+	routes = make([]*route, 0)
+
+	for _, action := range td.Actions {
+		slot := Slot{data: make(map[string]interface{})}
+		routes = append(routes, p.actionPath(ctxPath, &action, &slot))
+		routes = append(routes, p.actionTaskPath(ctxPath, &action, &slot))
+	}
+
+	return routes
+}
+
+func (p *Http) actionPath(ctxPath string, action *model.Action, slot *Slot) *route {
+	return &route{
+		name:    action.Name,
+		method:  "POST",
+		pattern: contextPath(ctxPath, action.Name),
+		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
+			value := WotObject{}
+			json.NewDecoder(r.Body).Decode(&value)
+
+			uuid, _ := newUUID()
+
+			_, rc := p.servers[ctxPath].InvokeAction(
+				action.Name,
+				value,
+				func(status int, text string) {
+					slot.data[uuid] = str.Concat("Status: ", status, ", Text: ", text)
+				})
+
+			if rc == wot.OK {
+				ok(w, uuid)
+			} else {
+				error(w, "Unknown action.")
+			}
+		},
+	}
+}
+
+func (p *Http) actionTaskPath(ctxPath string, action *model.Action, slot *Slot) *route {
+	return &route{
+		name:    str.Concat(action.Name, "Task"),
+		method:  "GET",
+		pattern: contextPath(ctxPath, str.Concat(action.Name, "/task/{taskid}")),
+		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
+			vars := mux.Vars(r)
+			taskid := vars["taskid"]
+
+			data, isOk := slot.data[taskid]
+
+			if isOk {
+				ok(w, data)
+			} else {
+				error(w, "Task id not found.")
+			}
+
+		},
+	}
+}
+
+// newUUID generates a random UUID according to RFC 4122
+func newUUID() (string, bool) {
+	uuid := make([]byte, 16)
+	n, err := io.ReadFull(rand.Reader, uuid)
+	if n != len(uuid) || err != nil {
+		return "", false
+	}
+	// variant bits; see section 4.1.1
+	uuid[8] = uuid[8]&^0xc0 | 0x80
+	// version 4 (pseudo-random); see section 4.1.3
+	uuid[6] = uuid[6]&^0xf0 | 0x40
+	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), true
 }
 
 func contextPath(ctxPath, element string) string {

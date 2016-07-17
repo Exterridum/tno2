@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"github.com/conas/tno2/util/concurrent"
 	"github.com/conas/tno2/util/str"
@@ -57,6 +58,7 @@ func (d *TestDriver) longRunningAction(name string) func(arg interface{}, status
 	return func(arg interface{}, statusHandler concurent.StatusHandler) {
 		for i := 0; i < 10; i++ {
 			statusHandler(i, str.Concat("Action -> ", name, ", Progress -> ", i*10, "%"))
+			time.Sleep(time.Second * 5)
 		}
 
 		statusHandler(100, "Action done.")
