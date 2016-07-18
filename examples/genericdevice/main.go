@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot"
-	"github.com/conas/tno2/wot/protocol"
+	"github.com/conas/tno2/wot/server/protocol"
 )
 
 var modelPrefix = "file://models/"
