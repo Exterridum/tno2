@@ -6,7 +6,7 @@ import (
 	"github.com/conas/tno2/wot/protocol"
 )
 
-var modelPrefix = "file://../../model/testdata/"
+var modelPrefix = "file://models/"
 var models = []string{"case-property-001", "case-action-001"}
 
 func main() {

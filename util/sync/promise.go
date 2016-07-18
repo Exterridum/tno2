@@ -1,4 +1,4 @@
-package concurent
+package sync
 
 // ----- Simple Promise
 
@@ -50,10 +50,10 @@ type StatusPromise struct {
 type TaskStatusCode int
 
 const (
-	SCHEDULED TaskStatusCode = iota
-	RUNNING
-	DONE
-	FAILED
+	TASK_SCHEDULED TaskStatusCode = iota
+	TASK_RUNNING
+	TASK_DONE
+	TASK_FAILED
 )
 
 type TaskStatus struct {

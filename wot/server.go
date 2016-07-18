@@ -3,7 +3,7 @@ package wot
 import (
 	"log"
 
-	"github.com/conas/tno2/util/concurrent"
+	"github.com/conas/tno2/util/sync"
 	"github.com/conas/tno2/wot/model"
 )
 
@@ -21,7 +21,7 @@ type Device interface {
 	Init(initParams map[string]interface{}, s *Server)
 }
 
-type ActionHandler func(interface{}, concurent.StatusHandler)
+type ActionHandler func(interface{}, sync.StatusHandler)
 
 type Status int
 
@@ -127,17 +127,17 @@ func (s *Server) OnGetProperty(propertyName string, propertyRetriever func() int
 	return s
 }
 
-func (s *Server) GetProperty(propertyName string) (*concurent.Promise, Status) {
+func (s *Server) GetProperty(propertyName string) (*sync.Promise, Status) {
 	cb, ok := s.propGetCB[propertyName]
 
 	if ok {
-		return concurent.Async(cb), OK
+		return sync.Async(cb), OK
 	} else {
 		return nil, UNKNOWN_PROPERTY
 	}
 }
 
-func (s *Server) SetProperty(propertyName string, newValue interface{}) (*concurent.Promise, Status) {
+func (s *Server) SetProperty(propertyName string, newValue interface{}) (*sync.Promise, Status) {
 	cb, ok := s.propSetCB[propertyName]
 
 	if ok {
@@ -146,7 +146,7 @@ func (s *Server) SetProperty(propertyName string, newValue interface{}) (*concur
 			return nil
 		}
 
-		return concurent.Async(callable), OK
+		return sync.Async(callable), OK
 	} else {
 		return nil, UNKNOWN_PROPERTY
 	}
@@ -170,18 +170,18 @@ func (s *Server) OnInvokeAction(
 func (s *Server) InvokeAction(
 	actionName string,
 	arg interface{},
-	statusHandler concurent.StatusHandler) (*concurent.StatusPromise, Status) {
+	statusHandler sync.StatusHandler) (*sync.StatusPromise, Status) {
 
 	actionHandler, ok := s.actionCB[actionName]
 
 	if ok {
-		callable := func(status concurent.StatusHandler) interface{} {
+		callable := func(status sync.StatusHandler) interface{} {
 			status.Schedule(arg)
 			actionHandler(arg, statusHandler)
 			return nil
 		}
 
-		return concurent.AsyncStatus(callable, statusHandler), OK
+		return sync.AsyncStatus(callable, statusHandler), OK
 	} else {
 		return nil, UNKNOWN_ACTION
 	}
@@ -208,8 +208,8 @@ func (s *Server) RemoveAllListeners(eventName string) *Server {
 	return s
 }
 
-func (s *Server) EmitEvent(eventName string, payload interface{}) *concurent.Promise {
-	return concurent.Async(func() interface{} {
+func (s *Server) EmitEvent(eventName string, payload interface{}) *sync.Promise {
+	return sync.Async(func() interface{} {
 		s.eventsCB[eventName](payload)
 		return nil
 	})

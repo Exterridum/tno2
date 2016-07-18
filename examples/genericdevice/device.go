@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/conas/tno2/util/concurrent"
+	"github.com/conas/tno2/util/sync"
 	"github.com/conas/tno2/wot"
 )
 
@@ -58,7 +58,7 @@ type ActionStatus struct {
 }
 
 func (d *TestDevice) longRunningAction(name string) wot.ActionHandler {
-	return func(arg interface{}, status concurent.StatusHandler) {
+	return func(arg interface{}, status sync.StatusHandler) {
 		for i := 0; i < 10; i++ {
 			status.Update(&ActionStatus{Status: i})
 			time.Sleep(time.Second * 2)
