@@ -1,15 +1,14 @@
 package protocol
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
 	"sync/atomic"
 
+	"github.com/conas/tno2/util/sec"
 	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot"
 	"github.com/conas/tno2/wot/model"
@@ -188,15 +187,14 @@ func (p *Http) actionPath(ctxPath string, action *model.Action, actionTaskPaths 
 			value := WotObject{}
 			json.NewDecoder(r.Body).Decode(&value)
 
-			uuid, _ := newUUID()
+			uuid, _ := sec.UUID4()
 			ash := newActionStatusHandler()
 			actionTaskPaths[uuid] = ash.Value
 
 			_, rc := p.servers[ctxPath].InvokeAction(action.Name, value, &ash)
 
-			//TODO: Link creator should be implemented to be able to customize external links creation
 			if rc == wot.OK {
-				sendOK(w, createLinks(str.Concat("http://", r.Host, r.URL, "/", uuid)))
+				sendOK(w, url(r, uuid))
 			} else {
 				sendERR(w, rc)
 			}
@@ -204,7 +202,9 @@ func (p *Http) actionPath(ctxPath string, action *model.Action, actionTaskPaths 
 	}
 }
 
-func createLinks(linkString string) *Links {
+func url(r *http.Request, relativeLink string) *Links {
+	linkString := str.Concat("http://", r.Host, r.URL, "/", relativeLink)
+
 	link := Link{
 		Rel:  "taskid",
 		Href: linkString,
@@ -233,20 +233,6 @@ func (p *Http) actionTaskPath(ctxPath string, action *model.Action, actionTaskPa
 			}
 		},
 	}
-}
-
-// newUUID generates a random UUID according to RFC 4122
-func newUUID() (string, bool) {
-	uuid := make([]byte, 16)
-	n, err := io.ReadFull(rand.Reader, uuid)
-	if n != len(uuid) || err != nil {
-		return "", false
-	}
-	// variant bits; see section 4.1.1
-	uuid[8] = uuid[8]&^0xc0 | 0x80
-	// version 4 (pseudo-random); see section 4.1.3
-	uuid[6] = uuid[6]&^0xf0 | 0x40
-	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), true
 }
 
 func contextPath(ctxPath, element string) string {
