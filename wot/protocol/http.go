@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot"
@@ -103,7 +104,7 @@ func (p *Http) descriptionPath(ctxPath string, td *model.ThingDescription) *rout
 		method:  "GET",
 		pattern: contextPath(ctxPath, "description"),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			ok(w, td)
+			sendOK(w, td)
 		},
 	}
 }
@@ -136,9 +137,9 @@ func (p *Http) getPropertyPath(ctxPath string, prop *model.Property) *route {
 
 			if rc == wot.OK {
 				value := promise.Wait()
-				ok(w, e(value))
+				sendOK(w, e(value))
 			} else {
-				error(w, "Unknown property.")
+				sendERR(w, rc)
 			}
 		},
 	}
@@ -159,14 +160,10 @@ func (p *Http) setPropertyPath(ctxPath string, prop *model.Property) *route {
 			if rc == wot.OK {
 				promise.Wait()
 			} else {
-				error(w, "Unknown property.")
+				sendERR(w, rc)
 			}
 		},
 	}
-}
-
-type Slot struct {
-	data map[string]interface{}
 }
 
 func (p *Http) actionsPath(ctxPath string, td *model.ThingDescription) []*route {
@@ -174,15 +171,15 @@ func (p *Http) actionsPath(ctxPath string, td *model.ThingDescription) []*route 
 	routes = make([]*route, 0)
 
 	for _, action := range td.Actions {
-		slot := Slot{data: make(map[string]interface{})}
-		routes = append(routes, p.actionPath(ctxPath, &action, &slot))
-		routes = append(routes, p.actionTaskPath(ctxPath, &action, &slot))
+		actionTaskPaths := make(map[string]*atomic.Value)
+		routes = append(routes, p.actionPath(ctxPath, &action, actionTaskPaths))
+		routes = append(routes, p.actionTaskPath(ctxPath, &action, actionTaskPaths))
 	}
 
 	return routes
 }
 
-func (p *Http) actionPath(ctxPath string, action *model.Action, slot *Slot) *route {
+func (p *Http) actionPath(ctxPath string, action *model.Action, actionTaskPaths map[string]*atomic.Value) *route {
 	return &route{
 		name:    action.Name,
 		method:  "POST",
@@ -192,40 +189,48 @@ func (p *Http) actionPath(ctxPath string, action *model.Action, slot *Slot) *rou
 			json.NewDecoder(r.Body).Decode(&value)
 
 			uuid, _ := newUUID()
+			ash := newActionStatusHandler()
+			actionTaskPaths[uuid] = ash.Value
 
-			_, rc := p.servers[ctxPath].InvokeAction(
-				action.Name,
-				value,
-				func(status int, text string) {
-					slot.data[uuid] = str.Concat("Status: ", status, ", Text: ", text)
-				})
+			_, rc := p.servers[ctxPath].InvokeAction(action.Name, value, &ash)
 
+			//TODO: Link creator should be implemented to be able to customize external links creation
 			if rc == wot.OK {
-				ok(w, uuid)
+				sendOK(w, createLinks(str.Concat("http://", r.Host, r.URL, "/", uuid)))
 			} else {
-				error(w, "Unknown action.")
+				sendERR(w, rc)
 			}
 		},
 	}
 }
 
-func (p *Http) actionTaskPath(ctxPath string, action *model.Action, slot *Slot) *route {
+func createLinks(linkString string) *Links {
+	link := Link{
+		Rel:  "taskid",
+		Href: linkString,
+	}
+
+	return &Links{
+		Links: append(make([]Link, 0), link),
+	}
+}
+
+func (p *Http) actionTaskPath(ctxPath string, action *model.Action, actionTaskPaths map[string]*atomic.Value) *route {
 	return &route{
 		name:    str.Concat(action.Name, "Task"),
 		method:  "GET",
-		pattern: contextPath(ctxPath, str.Concat(action.Name, "/task/{taskid}")),
+		pattern: contextPath(ctxPath, str.Concat(action.Name, "/{taskid}")),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			vars := mux.Vars(r)
 			taskid := vars["taskid"]
 
-			data, isOk := slot.data[taskid]
+			value, rc := actionTaskPaths[taskid]
 
-			if isOk {
-				ok(w, data)
+			if rc {
+				sendOK(w, value.Load())
 			} else {
-				error(w, "Task id not found.")
+				sendERR(w, rc)
 			}
-
 		},
 	}
 }
@@ -248,12 +253,21 @@ func contextPath(ctxPath, element string) string {
 	return str.Concat(ctxPath, "/", element)
 }
 
-func ok(w http.ResponseWriter, payload interface{}) {
+func sendOK(w http.ResponseWriter, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(payload)
 }
 
-func error(w http.ResponseWriter, payload interface{}) {
+func sendERR(w http.ResponseWriter, payload interface{}) {
 	w.Header().Set("Content-Type", "text/plain")
 	json.NewEncoder(w).Encode(payload)
+}
+
+type Links struct {
+	Links []Link `json:"links"`
+}
+
+type Link struct {
+	Rel  string `json:"rel"`
+	Href string `json:"href"`
 }

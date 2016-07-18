@@ -7,26 +7,26 @@ import (
 	"github.com/conas/tno2/wot/model"
 )
 
-//TODO: So far only one listener is supported per event
-
 type Server struct {
 	pubCh chan<- interface{}
 	td    *model.ThingDescription
 
 	propGetCB map[string]func() interface{}
 	propSetCB map[string]func(interface{})
-	actionCB  map[string]func(interface{}, concurent.StatusHandler)
+	actionCB  map[string]ActionHandler
 	eventsCB  map[string]func(interface{})
 }
 
-type Driver interface {
+type Device interface {
 	Init(initParams map[string]interface{}, s *Server)
 }
 
-type RETURN_CODE int
+type ActionHandler func(interface{}, concurent.StatusHandler)
+
+type Status int
 
 const (
-	OK RETURN_CODE = iota
+	OK Status = iota
 	UNKNOWN_PROPERTY
 	UNKNOWN_ACTION
 )
@@ -45,12 +45,12 @@ func CreateFromDescription(td *model.ThingDescription) *Server {
 		pubCh:     make(chan interface{}),
 		propGetCB: make(map[string]func() interface{}),
 		propSetCB: make(map[string]func(interface{})),
-		actionCB:  make(map[string]func(interface{}, concurent.StatusHandler)),
+		actionCB:  make(map[string]ActionHandler),
 		eventsCB:  make(map[string]func(interface{})),
 	}
 }
 
-func (s *Server) ConnectSync(d Driver, initParams map[string]interface{}) {
+func (s *Server) Connect(d Device, initParams map[string]interface{}) {
 	d.Init(initParams, s)
 }
 
@@ -127,7 +127,7 @@ func (s *Server) OnGetProperty(propertyName string, propertyRetriever func() int
 	return s
 }
 
-func (s *Server) GetProperty(propertyName string) (*concurent.Promise, RETURN_CODE) {
+func (s *Server) GetProperty(propertyName string) (*concurent.Promise, Status) {
 	cb, ok := s.propGetCB[propertyName]
 
 	if ok {
@@ -137,14 +137,16 @@ func (s *Server) GetProperty(propertyName string) (*concurent.Promise, RETURN_CO
 	}
 }
 
-func (s *Server) SetProperty(propertyName string, newValue interface{}) (*concurent.Promise, RETURN_CODE) {
+func (s *Server) SetProperty(propertyName string, newValue interface{}) (*concurent.Promise, Status) {
 	cb, ok := s.propSetCB[propertyName]
 
 	if ok {
-		return concurent.Async(func() interface{} {
+		callable := func() interface{} {
 			cb(newValue)
 			return nil
-		}), OK
+		}
+
+		return concurent.Async(callable), OK
 	} else {
 		return nil, UNKNOWN_PROPERTY
 	}
@@ -158,7 +160,7 @@ func (s *Server) AddAction(actionName string, inputType interface{}, outputType 
 
 func (s *Server) OnInvokeAction(
 	actionName string,
-	actionHandler func(interface{}, concurent.StatusHandler)) *Server {
+	actionHandler ActionHandler) *Server {
 	log.Print("Server -> ", s.GetDescription().Name, " OnInvokeAction actionName: ", actionName)
 
 	s.actionCB[actionName] = actionHandler
@@ -168,17 +170,18 @@ func (s *Server) OnInvokeAction(
 func (s *Server) InvokeAction(
 	actionName string,
 	arg interface{},
-	statusHandler concurent.StatusHandler) (*concurent.StatusPromise, RETURN_CODE) {
+	statusHandler concurent.StatusHandler) (*concurent.StatusPromise, Status) {
 
 	actionHandler, ok := s.actionCB[actionName]
 
 	if ok {
-		return concurent.AsyncStatus(
-			func(*concurent.StatusHandler) interface{} {
-				actionHandler(arg, statusHandler)
-				return nil
-			},
-			statusHandler), OK
+		callable := func(status concurent.StatusHandler) interface{} {
+			status.Schedule(arg)
+			actionHandler(arg, statusHandler)
+			return nil
+		}
+
+		return concurent.AsyncStatus(callable, statusHandler), OK
 	} else {
 		return nil, UNKNOWN_ACTION
 	}

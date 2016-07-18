@@ -44,13 +44,34 @@ func (prev *Promise) Wait() interface{} {
 
 type StatusPromise struct {
 	pch           chan interface{}
-	statusHandler *StatusHandler
+	statusHandler StatusHandler
 }
 
-type StatusHandler func(int, string)
+type TaskStatusCode int
 
-func AsyncStatus(task func(*StatusHandler) interface{}, statusHandler StatusHandler) *StatusPromise {
-	p := NewStatusPromise(&statusHandler)
+const (
+	SCHEDULED TaskStatusCode = iota
+	RUNNING
+	DONE
+	FAILED
+)
+
+type TaskStatus struct {
+	Code TaskStatusCode `json:"code"`
+	Data interface{}    `json:"data"`
+}
+
+type StatusHandler interface {
+	Schedule(interface{})
+	Update(interface{})
+	Done(interface{})
+	Fail(interface{})
+}
+
+// type StatusHandler func(TaskStatus, interface{})
+
+func AsyncStatus(task func(StatusHandler) interface{}, statusHandler StatusHandler) *StatusPromise {
+	p := NewStatusPromise(statusHandler)
 
 	go func() {
 		p.Channel() <- task(p.statusHandler)
@@ -59,7 +80,7 @@ func AsyncStatus(task func(*StatusHandler) interface{}, statusHandler StatusHand
 	return p
 }
 
-func NewStatusPromise(statusHandler *StatusHandler) *StatusPromise {
+func NewStatusPromise(statusHandler StatusHandler) *StatusPromise {
 	return &StatusPromise{
 		pch:           make(chan interface{}),
 		statusHandler: statusHandler,
@@ -70,7 +91,7 @@ func (p *StatusPromise) Channel() chan<- interface{} {
 	return p.pch
 }
 
-func (prev *StatusPromise) Then(callback func(interface{}, *StatusHandler) interface{}) *StatusPromise {
+func (prev *StatusPromise) Then(callback func(interface{}, StatusHandler) interface{}) *StatusPromise {
 	next := NewStatusPromise(prev.statusHandler)
 
 	go func() {
