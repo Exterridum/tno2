@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/conas/tno2/util/sync"
-	"github.com/conas/tno2/wot"
+	"github.com/conas/tno2/wot/server"
 )
 
 type TestDevice struct {
@@ -18,13 +18,13 @@ func NewTestDevice() *TestDevice {
 	}
 }
 
-func (d *TestDevice) Init(initParams map[string]interface{}, s *wot.Server) {
+func (d *TestDevice) Init(initParams map[string]interface{}, s *server.WotServer) {
 	log.Println("TestDriver -> initializing server ->", s.GetDescription().Name)
 	d.addPropsHandlers(s)
 	d.addActionsHandlers(s)
 }
 
-func (d *TestDevice) addPropsHandlers(s *wot.Server) {
+func (d *TestDevice) addPropsHandlers(s *server.WotServer) {
 	for _, p := range s.GetDescription().Properties {
 		log.Print("TestDevice -> found property: ", p.Name, ", writable:", p.Writable)
 		s.OnGetProperty(p.Name, d.getPropertyHandler(p.Name))
@@ -47,7 +47,7 @@ func (d *TestDevice) propUpdateListener(name string) func(newValue interface{}) 
 	}
 }
 
-func (d *TestDevice) addActionsHandlers(s *wot.Server) {
+func (d *TestDevice) addActionsHandlers(s *server.WotServer) {
 	for _, a := range s.GetDescription().Actions {
 		s.OnInvokeAction(a.Name, d.longRunningAction(a.Name))
 	}
@@ -57,7 +57,7 @@ type ActionStatus struct {
 	Status int
 }
 
-func (d *TestDevice) longRunningAction(name string) wot.ActionHandler {
+func (d *TestDevice) longRunningAction(name string) server.ActionHandler {
 	return func(arg interface{}, status sync.StatusHandler) {
 		for i := 0; i < 10; i++ {
 			status.Update(&ActionStatus{Status: i})

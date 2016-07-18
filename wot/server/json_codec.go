@@ -1,4 +1,4 @@
-package protocol
+package server
 
 import (
 	"encoding/json"

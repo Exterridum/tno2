@@ -1,4 +1,4 @@
-package protocol
+package server
 
 import (
 	"encoding/json"
@@ -10,7 +10,6 @@ import (
 
 	"github.com/conas/tno2/util/sec"
 	"github.com/conas/tno2/util/str"
-	"github.com/conas/tno2/wot"
 	"github.com/conas/tno2/wot/model"
 	"github.com/gorilla/mux"
 )
@@ -18,10 +17,10 @@ import (
 //Based on http://thenewstack.io/make-a-restful-json-api-go/
 
 type Http struct {
-	port    int
-	router  *mux.Router
-	hrefs   []string
-	servers map[string]*wot.Server
+	port       int
+	router     *mux.Router
+	hrefs      []string
+	wotServers map[string]*WotServer
 }
 
 type route struct {
@@ -36,16 +35,16 @@ type route struct {
 func NewHttp(port int) *Http {
 	// r.PathPrefix("/model").HandlerFunc(Model)
 	return &Http{
-		port:    port,
-		router:  mux.NewRouter().StrictSlash(true),
-		hrefs:   make([]string, 0),
-		servers: make(map[string]*wot.Server),
+		port:       port,
+		router:     mux.NewRouter().StrictSlash(true),
+		hrefs:      make([]string, 0),
+		wotServers: make(map[string]*WotServer),
 	}
 }
 
-func (p *Http) Bind(ctxPath string, s *wot.Server) {
+func (p *Http) Bind(ctxPath string, s *WotServer) {
 	td := s.GetDescription()
-	p.servers[ctxPath] = s
+	p.wotServers[ctxPath] = s
 	p.createRoutes(ctxPath, td)
 	//Update TD uris by created protocol bind
 	td.Uris = append(td.Uris, str.Concat("http://localhost:8080", ctxPath))
@@ -132,9 +131,9 @@ func (p *Http) getPropertyPath(ctxPath string, prop *model.Property) *route {
 		pattern: contextPath(ctxPath, prop.Name),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			name := prop.Name
-			promise, rc := p.servers[ctxPath].GetProperty(name)
+			promise, rc := p.wotServers[ctxPath].GetProperty(name)
 
-			if rc == wot.OK {
+			if rc == OK {
 				value := promise.Wait()
 				sendOK(w, e(value))
 			} else {
@@ -154,9 +153,9 @@ func (p *Http) setPropertyPath(ctxPath string, prop *model.Property) *route {
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			name := prop.Name
 			value := d(r.Body)
-			promise, rc := p.servers[ctxPath].SetProperty(name, value)
+			promise, rc := p.wotServers[ctxPath].SetProperty(name, value)
 
-			if rc == wot.OK {
+			if rc == OK {
 				promise.Wait()
 			} else {
 				sendERR(w, rc)
@@ -191,9 +190,9 @@ func (p *Http) actionPath(ctxPath string, action *model.Action, actionTaskPaths 
 			ash := newActionStatusHandler()
 			actionTaskPaths[uuid] = ash.Value
 
-			_, rc := p.servers[ctxPath].InvokeAction(action.Name, value, &ash)
+			_, rc := p.wotServers[ctxPath].InvokeAction(action.Name, value, &ash)
 
-			if rc == wot.OK {
+			if rc == OK {
 				sendOK(w, url(r, uuid))
 			} else {
 				sendERR(w, rc)
