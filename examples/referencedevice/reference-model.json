@@ -1,0 +1,52 @@
+{
+    "@context": [
+        "http://w3c.github.io/wot/w3c-wot-td-context.jsonld"
+    ],
+    "@type": "Thing",
+    "name": "simple-event",
+    "uris": [],
+    "encodings": [
+        "JSON"
+    ],
+    "properties": [
+        {
+            "name": "rw-number",
+            "valueType": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 255
+            },
+            "writable": true,
+            "hrefs": [
+                "property/rw-number"
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "@type": "long-running",
+            "name": "long-running",
+            "inputData": {
+                "valueType": {
+                    "type": "integer"
+                },
+                "unit": "ms"
+            },
+            "hrefs": [
+                "action/long-running"
+            ]
+        }
+    ],
+    "events": [
+        {
+            "@type": "alert",
+            "name": "critical-condition-event",
+            "valueType": {
+                "type": "string"
+            },
+            "hrefs": [
+                "event/alert"
+            ]
+        }
+    ]
+}

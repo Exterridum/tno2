@@ -18,6 +18,7 @@ type ThingDescription struct {
 	Encodings  []string   `json:"encodings"`
 	Properties []Property `json:"properties"`
 	Actions    []Action   `json:"actions"`
+	Events     []Event    `json:"events"`
 }
 
 type Property struct {
@@ -34,6 +35,13 @@ type Action struct {
 	InputData  InputData  `json:"inputData"`
 	OutputData OutputData `json:"outputData"`
 	Hrefs      []string   `json:"hrefs"`
+}
+
+type Event struct {
+	AT_Type   string    `json:"@type"`
+	Name      string    `json:"name"`
+	ValueType ValueType `json:"valueType"`
+	Hrefs     []string  `json:"hrefs"`
 }
 
 type InputData struct {

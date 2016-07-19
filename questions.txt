@@ -9,3 +9,4 @@ Q6: if we separate definition from callback definition, do we say that we can ha
 Q7: If multiple callback are allowed, What should promise contain
 Q8: On AddEvent, AddAction, AddProperty, should we dynamically update TD? In that case WebIDL sould containt Event, Action, Property object as defined  by model ... ?
 Q9: How do we know what specific instance of listener to be removed when only event is specified
+Q10: We value types

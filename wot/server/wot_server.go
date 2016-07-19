@@ -3,7 +3,7 @@ package server
 import (
 	"log"
 
-	"github.com/conas/tno2/util/sync"
+	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/wot/model"
 )
 
@@ -14,14 +14,19 @@ type WotServer struct {
 	propGetCB map[string]func() interface{}
 	propSetCB map[string]func(interface{})
 	actionCB  map[string]ActionHandler
-	eventsCB  map[string]func(interface{})
+	eventsCB  map[string][]*EventListener
 }
 
 type Device interface {
 	Init(initParams map[string]interface{}, s *WotServer)
 }
 
-type ActionHandler func(interface{}, sync.StatusHandler)
+type ActionHandler func(interface{}, async.StatusHandler)
+
+type EventListener struct {
+	ID string
+	CB func(interface{})
+}
 
 type Status int
 
@@ -29,6 +34,7 @@ const (
 	OK Status = iota
 	UNKNOWN_PROPERTY
 	UNKNOWN_ACTION
+	UNKNOWN_EVENT
 )
 
 func CreateThing(name string) *WotServer {
@@ -46,7 +52,7 @@ func CreateFromDescription(td *model.ThingDescription) *WotServer {
 		propGetCB: make(map[string]func() interface{}),
 		propSetCB: make(map[string]func(interface{})),
 		actionCB:  make(map[string]ActionHandler),
-		eventsCB:  make(map[string]func(interface{})),
+		eventsCB:  make(map[string][]*EventListener),
 	}
 }
 
@@ -127,17 +133,17 @@ func (s *WotServer) OnGetProperty(propertyName string, propertyRetriever func() 
 	return s
 }
 
-func (s *WotServer) GetProperty(propertyName string) (*sync.Promise, Status) {
+func (s *WotServer) GetProperty(propertyName string) (*async.Promise, Status) {
 	cb, ok := s.propGetCB[propertyName]
 
 	if ok {
-		return sync.Async(cb), OK
+		return async.Async(cb), OK
 	} else {
 		return nil, UNKNOWN_PROPERTY
 	}
 }
 
-func (s *WotServer) SetProperty(propertyName string, newValue interface{}) (*sync.Promise, Status) {
+func (s *WotServer) SetProperty(propertyName string, newValue interface{}) (*async.Promise, Status) {
 	cb, ok := s.propSetCB[propertyName]
 
 	if ok {
@@ -146,7 +152,7 @@ func (s *WotServer) SetProperty(propertyName string, newValue interface{}) (*syn
 			return nil
 		}
 
-		return sync.Async(callable), OK
+		return async.Async(callable), OK
 	} else {
 		return nil, UNKNOWN_PROPERTY
 	}
@@ -170,18 +176,18 @@ func (s *WotServer) OnInvokeAction(
 func (s *WotServer) InvokeAction(
 	actionName string,
 	arg interface{},
-	statusHandler sync.StatusHandler) (*sync.StatusPromise, Status) {
+	statusHandler async.StatusHandler) (*async.StatusPromise, Status) {
 
 	actionHandler, ok := s.actionCB[actionName]
 
 	if ok {
-		callable := func(status sync.StatusHandler) interface{} {
+		callable := func(status async.StatusHandler) interface{} {
 			status.Schedule(arg)
 			actionHandler(arg, statusHandler)
 			return nil
 		}
 
-		return sync.AsyncStatus(callable, statusHandler), OK
+		return async.AsyncStatus(callable, statusHandler), OK
 	} else {
 		return nil, UNKNOWN_ACTION
 	}
@@ -193,8 +199,8 @@ func (s *WotServer) AddEvent(eventName string, payloadType interface{}) *WotServ
 	panic("Add event not implemented!")
 }
 
-func (s *WotServer) AddListener(eventName string, listener func(interface{})) *WotServer {
-	s.eventsCB[eventName] = listener
+func (s *WotServer) AddListener(eventName string, listener *EventListener) *WotServer {
+	s.eventsCB[eventName] = append(s.eventsCB[eventName], listener)
 	return s
 }
 
@@ -208,9 +214,20 @@ func (s *WotServer) RemoveAllListeners(eventName string) *WotServer {
 	return s
 }
 
-func (s *WotServer) EmitEvent(eventName string, payload interface{}) *sync.Promise {
-	return sync.Async(func() interface{} {
-		s.eventsCB[eventName](payload)
-		return nil
-	})
+func (s *WotServer) EmitEvent(eventName string, payload interface{}) (*async.Promise, Status) {
+	listeners, ok := s.eventsCB[eventName]
+
+	if ok {
+		return async.Async(func() interface{} {
+			for _, eventListener := range listeners {
+				eventListener.CB(payload)
+			}
+
+			return nil
+
+		}), OK
+	}
+
+	//TODO implement completed promise
+	return nil, OK
 }

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sync/atomic"
 
+	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/util/sec"
 	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot/model"
@@ -64,11 +65,15 @@ func (p *Http) createRoutes(ctxPath string, td *model.ThingDescription) {
 	routes = append(routes, p.rootPath(ctxPath, td))
 	routes = append(routes, p.descriptionPath(ctxPath, td))
 
-	for _, path := range p.propertiesPath(ctxPath, td) {
+	for _, path := range p.propertiesPaths(ctxPath, td) {
 		routes = append(routes, path)
 	}
 
-	for _, path := range p.actionsPath(ctxPath, td) {
+	for _, path := range p.actionsPaths(ctxPath, td) {
+		routes = append(routes, path)
+	}
+
+	for _, path := range p.eventsPaths(ctxPath, td) {
 		routes = append(routes, path)
 	}
 
@@ -107,7 +112,7 @@ func (p *Http) descriptionPath(ctxPath string, td *model.ThingDescription) *rout
 	}
 }
 
-func (p *Http) propertiesPath(ctxPath string, td *model.ThingDescription) []*route {
+func (p *Http) propertiesPaths(ctxPath string, td *model.ThingDescription) []*route {
 	var routes []*route
 	routes = make([]*route, 0)
 
@@ -128,7 +133,7 @@ func (p *Http) getPropertyPath(ctxPath string, prop *model.Property) *route {
 	return &route{
 		name:    prop.Name,
 		method:  "GET",
-		pattern: contextPath(ctxPath, prop.Name),
+		pattern: contextPath(ctxPath, prop.Hrefs[0]),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			name := prop.Name
 			promise, rc := p.wotServers[ctxPath].GetProperty(name)
@@ -147,9 +152,9 @@ func (p *Http) setPropertyPath(ctxPath string, prop *model.Property) *route {
 	d := Decoder(prop)
 
 	return &route{
-		name:    prop.Name,
+		name:    prop.Hrefs[0],
 		method:  "PUT",
-		pattern: contextPath(ctxPath, prop.Name),
+		pattern: contextPath(ctxPath, prop.Hrefs[0]),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			name := prop.Name
 			value := d(r.Body)
@@ -164,24 +169,25 @@ func (p *Http) setPropertyPath(ctxPath string, prop *model.Property) *route {
 	}
 }
 
-func (p *Http) actionsPath(ctxPath string, td *model.ThingDescription) []*route {
+func (p *Http) actionsPaths(ctxPath string, td *model.ThingDescription) []*route {
 	var routes []*route
 	routes = make([]*route, 0)
 
 	for _, action := range td.Actions {
 		actionTaskPaths := make(map[string]*atomic.Value)
-		routes = append(routes, p.actionPath(ctxPath, &action, actionTaskPaths))
-		routes = append(routes, p.actionTaskPath(ctxPath, &action, actionTaskPaths))
+		actionRoute, actionTaskRoute := p.actionPath(ctxPath, &action, actionTaskPaths)
+		routes = append(routes, actionRoute)
+		routes = append(routes, actionTaskRoute)
 	}
 
 	return routes
 }
 
-func (p *Http) actionPath(ctxPath string, action *model.Action, actionTaskPaths map[string]*atomic.Value) *route {
-	return &route{
-		name:    action.Name,
+func (p *Http) actionPath(ctxPath string, action *model.Action, actionTaskPaths map[string]*atomic.Value) (*route, *route) {
+	actionRoute := &route{
+		name:    action.Hrefs[0],
 		method:  "POST",
-		pattern: contextPath(ctxPath, action.Name),
+		pattern: contextPath(ctxPath, action.Hrefs[0]),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			value := WotObject{}
 			json.NewDecoder(r.Body).Decode(&value)
@@ -193,32 +199,17 @@ func (p *Http) actionPath(ctxPath string, action *model.Action, actionTaskPaths 
 			_, rc := p.wotServers[ctxPath].InvokeAction(action.Name, value, &ash)
 
 			if rc == OK {
-				sendOK(w, url(r, uuid))
+				sendOK(w, httpSubUrl(r, uuid))
 			} else {
 				sendERR(w, rc)
 			}
 		},
 	}
-}
 
-func url(r *http.Request, relativeLink string) *Links {
-	linkString := str.Concat("http://", r.Host, r.URL, "/", relativeLink)
-
-	link := Link{
-		Rel:  "taskid",
-		Href: linkString,
-	}
-
-	return &Links{
-		Links: append(make([]Link, 0), link),
-	}
-}
-
-func (p *Http) actionTaskPath(ctxPath string, action *model.Action, actionTaskPaths map[string]*atomic.Value) *route {
-	return &route{
-		name:    str.Concat(action.Name, "Task"),
+	actionTaskRoute := &route{
+		name:    str.Concat(action.Hrefs[0], "Task"),
 		method:  "GET",
-		pattern: contextPath(ctxPath, str.Concat(action.Name, "/{taskid}")),
+		pattern: contextPath(ctxPath, str.Concat(action.Hrefs[0], "/{taskid}")),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			vars := mux.Vars(r)
 			taskid := vars["taskid"]
@@ -231,6 +222,67 @@ func (p *Http) actionTaskPath(ctxPath string, action *model.Action, actionTaskPa
 				sendERR(w, rc)
 			}
 		},
+	}
+
+	return actionRoute, actionTaskRoute
+}
+
+func (p *Http) eventsPaths(ctxPath string, td *model.ThingDescription) []*route {
+	var routes []*route
+	routes = make([]*route, 0)
+
+	for _, event := range td.Events {
+		eventSubscribers := async.NewFanOut()
+		routes = append(routes, p.eventPath(ctxPath, &event, eventSubscribers))
+		routes = append(routes, p.eventCallbackPath(ctxPath, &event, eventSubscribers))
+	}
+
+	return routes
+}
+
+func (p *Http) eventPath(ctxPath string, event *model.Event, eventSubscribers *async.FanOut) *route {
+	return &route{
+		name:    event.Hrefs[0],
+		method:  "POST",
+		pattern: contextPath(ctxPath, event.Hrefs[0]),
+		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
+			uuid, _ := sec.UUID4()
+
+			_, rc := p.wotServers[ctxPath].AddListener(event.Name, value)
+
+			//TODO: check for event existance
+			sendOK(w, websocketSubUrl(r, uuid))
+		},
+	}
+}
+
+func (p *Http) eventCallbackPath(ctxPath string, event *model.Event, eventSubscribers *async.FanOut) *route {
+	return nil
+}
+
+func httpSubUrl(r *http.Request, subresource string) *Links {
+	linkString := str.Concat("http://", r.Host, r.URL, "/", subresource)
+
+	link := Link{
+		Rel:  "taskid",
+		Href: linkString,
+	}
+
+	return &Links{
+		Links: append(make([]Link, 0), link),
+	}
+}
+
+func websocketSubUrl(r *http.Request, subresource string) *Links {
+	linkString := str.Concat("ws://", r.Host, r.URL, "/", subresource)
+
+	link := Link{
+		Rel:  "taskid",
+		Href: linkString,
+	}
+
+	return &Links{
+		Links: append(make([]Link, 0), link),
 	}
 }
 

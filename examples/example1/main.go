@@ -3,8 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/conas/tno2/util/concurrent"
-	"github.com/conas/tno2/wot"
+	"github.com/conas/tno2/wot/server"
 )
 
 type SampleDevice struct {
@@ -21,7 +20,7 @@ func NewSampleDevice() *SampleDevice {
 	}
 }
 
-func (d *SampleDevice) Init(initParams map[string]interface{}, s *wot.Server) {
+func (d *SampleDevice) Init(initParams map[string]interface{}, s *server.WotServer) {
 
 	s.OnGetProperty("relay", func() interface{} {
 		return d.db["relay"]
