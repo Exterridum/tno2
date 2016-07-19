@@ -9,9 +9,7 @@ import (
 )
 
 type WotServer struct {
-	pubCh chan<- interface{}
-	td    *model.ThingDescription
-
+	td        *model.ThingDescription
 	propGetCB map[string]func() interface{}
 	propSetCB map[string]func(interface{})
 	actionCB  map[string]ActionHandler
@@ -49,7 +47,6 @@ func CreateFromDescriptionUri(uri string) *WotServer {
 func CreateFromDescription(td *model.ThingDescription) *WotServer {
 	return &WotServer{
 		td:        td,
-		pubCh:     make(chan interface{}),
 		propGetCB: make(map[string]func() interface{}),
 		propSetCB: make(map[string]func(interface{})),
 		actionCB:  make(map[string]ActionHandler),
