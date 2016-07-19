@@ -6,7 +6,7 @@ type Promise struct {
 	pch chan interface{}
 }
 
-func Async(task func() interface{}) *Promise {
+func Run(task func() interface{}) *Promise {
 	p := NewPromise()
 
 	go func() {
@@ -70,7 +70,7 @@ type StatusHandler interface {
 
 // type StatusHandler func(TaskStatus, interface{})
 
-func AsyncStatus(task func(StatusHandler) interface{}, statusHandler StatusHandler) *StatusPromise {
+func RunWithStatus(task func(StatusHandler) interface{}, statusHandler StatusHandler) *StatusPromise {
 	p := NewStatusPromise(statusHandler)
 
 	go func() {

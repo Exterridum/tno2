@@ -2,6 +2,7 @@ package server
 
 import (
 	"log"
+	"time"
 
 	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/wot/model"
@@ -137,7 +138,7 @@ func (s *WotServer) GetProperty(propertyName string) (*async.Promise, Status) {
 	cb, ok := s.propGetCB[propertyName]
 
 	if ok {
-		return async.Async(cb), OK
+		return async.Run(cb), OK
 	} else {
 		return nil, UNKNOWN_PROPERTY
 	}
@@ -152,7 +153,7 @@ func (s *WotServer) SetProperty(propertyName string, newValue interface{}) (*asy
 			return nil
 		}
 
-		return async.Async(callable), OK
+		return async.Run(callable), OK
 	} else {
 		return nil, UNKNOWN_PROPERTY
 	}
@@ -187,7 +188,7 @@ func (s *WotServer) InvokeAction(
 			return nil
 		}
 
-		return async.AsyncStatus(callable, statusHandler), OK
+		return async.RunWithStatus(callable, statusHandler), OK
 	} else {
 		return nil, UNKNOWN_ACTION
 	}
@@ -218,9 +219,13 @@ func (s *WotServer) EmitEvent(eventName string, payload interface{}) (*async.Pro
 	listeners, ok := s.eventsCB[eventName]
 
 	if ok {
-		return async.Async(func() interface{} {
+		return async.Run(func() interface{} {
+			ev := Event{
+				Event:     payload,
+				Timestamp: time.Now(),
+			}
 			for _, eventListener := range listeners {
-				eventListener.CB(payload)
+				eventListener.CB(ev)
 			}
 
 			return nil

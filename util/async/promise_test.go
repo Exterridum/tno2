@@ -6,7 +6,7 @@ import (
 )
 
 func TestCase1(t *testing.T) {
-	Async(func() interface{} {
+	Run(func() interface{} {
 		return 3 + 4
 	}).Then(func(val interface{}) interface{} {
 		return 2 * val.(int)

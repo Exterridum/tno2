@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/util/sec"
 	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot/model"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
 //Based on http://thenewstack.io/make-a-restful-json-api-go/
@@ -232,32 +234,85 @@ func (p *Http) eventsPaths(ctxPath string, td *model.ThingDescription) []*route 
 	routes = make([]*route, 0)
 
 	for _, event := range td.Events {
-		eventSubscribers := async.NewFanOut()
-		routes = append(routes, p.eventPath(ctxPath, &event, eventSubscribers))
-		routes = append(routes, p.eventCallbackPath(ctxPath, &event, eventSubscribers))
+		internalSubscribers := async.NewFanOut()
+		eventPath, eventWebSocketSubscription := p.eventPath(ctxPath, &event, internalSubscribers)
+		routes = append(routes, eventPath)
+		routes = append(routes, eventWebSocketSubscription)
 	}
 
 	return routes
 }
 
-func (p *Http) eventPath(ctxPath string, event *model.Event, eventSubscribers *async.FanOut) *route {
-	return &route{
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin:     func(r *http.Request) bool { return true },
+}
+
+func (p *Http) eventPath(ctxPath string, event *model.Event, internalSubscribers *async.FanOut) (*route, *route) {
+	eventPath := &route{
 		name:    event.Hrefs[0],
 		method:  "POST",
 		pattern: contextPath(ctxPath, event.Hrefs[0]),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			uuid, _ := sec.UUID4()
+			subscriptionID, _ := sec.UUID4()
 
-			_, rc := p.wotServers[ctxPath].AddListener(event.Name, value)
+			p.wotServers[ctxPath].AddListener(event.Name, p.eventHandler(subscriptionID, internalSubscribers))
 
-			//TODO: check for event existance
-			sendOK(w, websocketSubUrl(r, uuid))
+			//TODO: check for event existence
+			sendOK(w, websocketSubUrl(r, subscriptionID))
 		},
 	}
+
+	eventWebSocketSubscription := &route{
+		name:    str.Concat(event.Hrefs[0], "WebSocket"),
+		method:  "GET",
+		pattern: contextPath(ctxPath, str.Concat(event.Hrefs[0], "/ws/{subscriptionID}")),
+		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
+			// we need subscriptionID to check if such a one exists
+			// vars := mux.Vars(r)
+			// subscriptionID := vars["subscriptionID"]
+
+			conn, err := upgrader.Upgrade(w, r, nil)
+
+			if err != nil {
+				log.Println("Error creating WebSocket at: ", err)
+				return
+			}
+
+			eventSource := make(chan interface{})
+			internalSubscriptionID, _ := sec.UUID4()
+
+			log.Println("Created internal subscriber: ", internalSubscriptionID)
+			internalSubscribers.AddSubscriber(internalSubscriptionID, eventSource)
+
+			for event := range eventSource {
+				if err = conn.WriteJSON(event); err != nil {
+					internalSubscribers.RemoveSubscriber(internalSubscriptionID)
+					log.Println("Removed internal subscriber: ", internalSubscriptionID)
+					break
+				}
+			}
+		},
+	}
+
+	return eventPath, eventWebSocketSubscription
 }
 
-func (p *Http) eventCallbackPath(ctxPath string, event *model.Event, eventSubscribers *async.FanOut) *route {
-	return nil
+type Event struct {
+	Timestamp time.Time   `json:"timestamp,omitempty"`
+	Event     interface{} `json:"event,omitempty"`
+}
+
+func (p *Http) eventHandler(uuid string, internalSubscribers *async.FanOut) *EventListener {
+	el := &EventListener{
+		ID: uuid,
+		CB: func(event interface{}) {
+			internalSubscribers.Publish(event)
+		},
+	}
+
+	return el
 }
 
 func httpSubUrl(r *http.Request, subresource string) *Links {
@@ -274,7 +329,7 @@ func httpSubUrl(r *http.Request, subresource string) *Links {
 }
 
 func websocketSubUrl(r *http.Request, subresource string) *Links {
-	linkString := str.Concat("ws://", r.Host, r.URL, "/", subresource)
+	linkString := str.Concat("ws://", r.Host, r.URL, "/ws/", subresource)
 
 	link := Link{
 		Rel:  "taskid",
