@@ -3,11 +3,11 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
-	"sync"
-	"time"
 
 	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/util/sec"
@@ -17,54 +17,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type WSSubscribers struct {
-	rwmut        *sync.RWMutex
-	subscription map[string]*async.FanOut
-}
-
-func NewWSSubscribers() *WSSubscribers {
-	return &WSSubscribers{
-		rwmut:        &sync.RWMutex{},
-		subscription: make(map[string]*async.FanOut),
-	}
-}
-
-func (wss *WSSubscribers) CreateSubscription(subscriptionID string, clients *async.FanOut) {
-	wss.rwmut.Lock()
-	defer wss.rwmut.Unlock()
-
-	wss.subscription[subscriptionID] = clients
-}
-
-func (wss *WSSubscribers) CancelSubscription(subscriptionID string) {
-	wss.rwmut.Lock()
-	defer wss.rwmut.Unlock()
-
-	wss.subscription[subscriptionID].RemoveAllSubscribes()
-	delete(wss.subscription, subscriptionID)
-}
-
-func (wss *WSSubscribers) AddClient(subscriptionID string, client chan<- interface{}) int {
-	wss.rwmut.RLock()
-	defer wss.rwmut.RUnlock()
-
-	return wss.subscription[subscriptionID].AddSubscriber(client)
-}
-
-func (wss *WSSubscribers) RemoveClient(subscriptionID string, clientID int) {
-	wss.rwmut.RLock()
-	defer wss.rwmut.RUnlock()
-
-	wss.subscription[subscriptionID].RemoveSubscriber(clientID)
-}
-
 type Http struct {
-	port           int
-	router         *mux.Router
-	hrefs          []string
-	wotServers     map[string]*WotServer
-	wssSubscribers *WSSubscribers
-	actionResults  *ActionResults
+	port          int
+	router        *mux.Router
+	hrefs         []string
+	wotServers    map[string]*WotServer
+	subscribers   *Subscribers
+	actionResults *ActionResults
 }
 
 // ----- Server API methods
@@ -72,12 +31,12 @@ type Http struct {
 func NewHttp(port int) *Http {
 	// r.PathPrefix("/model").HandlerFunc(Model)
 	return &Http{
-		port:           port,
-		router:         mux.NewRouter().StrictSlash(true),
-		hrefs:          make([]string, 0),
-		wotServers:     make(map[string]*WotServer),
-		wssSubscribers: NewWSSubscribers(),
-		actionResults:  NewActionResults(),
+		port:          port,
+		router:        mux.NewRouter().StrictSlash(true),
+		hrefs:         make([]string, 0),
+		wotServers:    make(map[string]*WotServer),
+		subscribers:   NewSubscribers(),
+		actionResults: NewActionResults(),
 	}
 }
 
@@ -188,7 +147,7 @@ func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w h
 	return func(w http.ResponseWriter, r *http.Request) {
 		promise, rc := p.wotServers[ctxPath].GetProperty(prop.Name)
 
-		if rc == OK {
+		if rc == WOT_OK {
 			value := promise.Wait()
 			sendOK(w, e(value))
 		} else {
@@ -205,7 +164,7 @@ func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w h
 		value := d(r.Body)
 		promise, rc := p.wotServers[ctxPath].SetProperty(name, value)
 
-		if rc == OK {
+		if rc == WOT_OK {
 			promise.Wait()
 		} else {
 			sendERR(w, rc)
@@ -216,20 +175,29 @@ func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w h
 func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		//FIXME: fix action request deserialization
-		value := WotObject{}
-		json.NewDecoder(r.Body).Decode(&value)
+		value := Decode(r.Body)
+		// json.NewDecoder(r.Body).Decode(&value)
 
 		actionID, slot := p.actionResults.CreateSlot()
 		ash := NewActionStatusHandler(slot)
 
 		_, rc := wotServer.InvokeAction(actionName, value, ash)
 
-		if rc == OK {
+		if rc == WOT_OK {
 			sendOK(w, httpSubUrl(r, actionID))
 		} else {
 			sendERR(w, rc)
 		}
 	}
+}
+
+func Decode(request io.ReadCloser) interface{} {
+	body, _ := ioutil.ReadAll(request)
+
+	var abc interface{}
+	json.Unmarshal(body, &abc)
+
+	return abc
 }
 
 func (p *Http) actionTaskHandler(w http.ResponseWriter, r *http.Request) {
@@ -255,7 +223,7 @@ func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) fun
 		subscriptionID, _ := sec.UUID4()
 		clients := async.NewFanOut()
 
-		p.wssSubscribers.CreateSubscription(subscriptionID, clients)
+		p.subscribers.CreateSubscription(subscriptionID, clients)
 		wotServer.AddListener(eventName, p.eventHandler(subscriptionID, clients))
 
 		//TODO: check for event existence
@@ -274,23 +242,18 @@ func (p *Http) eventClientHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	subscriptionID := vars["subscriptionID"]
 	client := make(chan interface{})
-	clientID := p.wssSubscribers.AddClient(subscriptionID, client)
+	clientID := p.subscribers.AddClient(subscriptionID, client)
 
 	log.Println("Created internal subscriber subscriptionID: ", subscriptionID, " clientID: ", clientID)
 
 	wsOpened := true
 	for event := range client {
 		if err = conn.WriteJSON(event); err != nil && wsOpened {
-			p.wssSubscribers.RemoveClient(subscriptionID, clientID)
+			p.subscribers.RemoveClient(subscriptionID, clientID)
 			log.Println("Removed internal subscriber subscriptionID: ", subscriptionID, " clientID: ", clientID)
 			wsOpened = false
 		}
 	}
-}
-
-type Event struct {
-	Timestamp time.Time   `json:"timestamp,omitempty"`
-	Event     interface{} `json:"event,omitempty"`
 }
 
 func (p *Http) eventHandler(uuid string, clients *async.FanOut) *EventListener {
@@ -340,7 +303,7 @@ func sendOK(w http.ResponseWriter, payload interface{}) {
 }
 
 func sendERR(w http.ResponseWriter, payload interface{}) {
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(payload)
 }
 

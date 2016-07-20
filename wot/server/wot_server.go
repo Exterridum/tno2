@@ -8,6 +8,10 @@ import (
 	"github.com/conas/tno2/wot/model"
 )
 
+// ----- AS DEFINED BY WEB IDL
+// http://w3c.github.io/wot/current-practices/wot-practices.html#idl-def-exposedthing
+// https://github.com/w3c/wot/tree/master/proposals/restructured-scripting-api#exposedthing
+
 type WotServer struct {
 	td        *model.ThingDescription
 	propGetCB map[string]func() interface{}
@@ -27,13 +31,18 @@ type EventListener struct {
 	CB func(interface{})
 }
 
+type Event struct {
+	Timestamp time.Time   `json:"timestamp,omitempty"`
+	Event     interface{} `json:"event,omitempty"`
+}
+
 type Status int
 
 const (
-	OK Status = iota
-	UNKNOWN_PROPERTY
-	UNKNOWN_ACTION
-	UNKNOWN_EVENT
+	WOT_OK Status = iota
+	WOT_UNKNOWN_PROPERTY
+	WOT_UNKNOWN_ACTION
+	WOT_UNKNOWN_EVENT
 )
 
 func CreateThing(name string) *WotServer {
@@ -80,30 +89,6 @@ func (s *WotServer) actionExists(name string) bool {
 	return false
 }
 
-// ----- AS DEFINED BY WEB IDL
-// https://github.com/w3c/wot/tree/master/proposals/restructured-scripting-api#exposedthing
-//
-// WebIDL
-// interface ExposedThing {
-//     readonly attribute DOMString name;
-//     Promise<any> invokeAction(DOMString actionName, any parameter);
-//     Promise<any> setProperty(DOMString propertyName, any newValue);
-//     Promise<any> getProperty(DOMString propertyName);
-//     Promise<any> emitEvent(DOMString eventName, any payload);
-//     ExposedThing addEvent(DOMString eventName, object payloadType);
-//     ExposedThing addAction(DOMString actionName,
-//                            object inputType,
-//                            object outputType);
-//     ExposedThing addProperty(DOMString propertyName, object contentType);
-//     ExposedThing onInvokeAction(DOMString actionName, ActionHandler callback);
-//     ExposedThing onUpdateProperty(DOMString propertyName,
-//                                   PropertyChangeListener callback);
-//     ExposedThing addListener(DOMString eventName, ThingEventListener listener);
-//     ExposedThing removeListener(DOMString eventName,
-//                                 ThingEventListener listener);
-//     ExposedThing removeAllListeners(DOMString eventName);
-//     object       getDescription();
-// };
 func (s *WotServer) Name() string {
 	return s.td.Name
 }
@@ -135,9 +120,9 @@ func (s *WotServer) GetProperty(propertyName string) (*async.Promise, Status) {
 	cb, ok := s.propGetCB[propertyName]
 
 	if ok {
-		return async.Run(cb), OK
+		return async.Run(cb), WOT_OK
 	} else {
-		return nil, UNKNOWN_PROPERTY
+		return nil, WOT_UNKNOWN_PROPERTY
 	}
 }
 
@@ -150,9 +135,9 @@ func (s *WotServer) SetProperty(propertyName string, newValue interface{}) (*asy
 			return nil
 		}
 
-		return async.Run(callable), OK
+		return async.Run(callable), WOT_OK
 	} else {
-		return nil, UNKNOWN_PROPERTY
+		return nil, WOT_UNKNOWN_PROPERTY
 	}
 }
 
@@ -185,9 +170,9 @@ func (s *WotServer) InvokeAction(
 			return nil
 		}
 
-		return async.RunWithStatus(callable, statusHandler), OK
+		return async.RunWithStatus(callable, statusHandler), WOT_OK
 	} else {
-		return nil, UNKNOWN_ACTION
+		return nil, WOT_UNKNOWN_ACTION
 	}
 }
 
@@ -227,9 +212,9 @@ func (s *WotServer) EmitEvent(eventName string, payload interface{}) (*async.Pro
 
 			return nil
 
-		}), OK
+		}), WOT_OK
 	}
 
 	//TODO implement completed promise
-	return nil, OK
+	return nil, WOT_OK
 }
