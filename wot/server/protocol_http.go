@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/conas/tno2/util/async"
@@ -17,20 +17,54 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-//Based on http://thenewstack.io/make-a-restful-json-api-go/
-
-type Http struct {
-	port       int
-	router     *mux.Router
-	hrefs      []string
-	wotServers map[string]*WotServer
+type WSSubscribers struct {
+	rwmut        *sync.RWMutex
+	subscription map[string]*async.FanOut
 }
 
-type route struct {
-	name        string
-	method      string
-	pattern     string
-	handlerFunc http.HandlerFunc
+func NewWSSubscribers() *WSSubscribers {
+	return &WSSubscribers{
+		rwmut:        &sync.RWMutex{},
+		subscription: make(map[string]*async.FanOut),
+	}
+}
+
+func (wss *WSSubscribers) CreateSubscription(subscriptionID string, clients *async.FanOut) {
+	wss.rwmut.Lock()
+	defer wss.rwmut.Unlock()
+
+	wss.subscription[subscriptionID] = clients
+}
+
+func (wss *WSSubscribers) CancelSubscription(subscriptionID string) {
+	wss.rwmut.Lock()
+	defer wss.rwmut.Unlock()
+
+	wss.subscription[subscriptionID].RemoveAllSubscribes()
+	delete(wss.subscription, subscriptionID)
+}
+
+func (wss *WSSubscribers) AddClient(subscriptionID string, client chan<- interface{}) int {
+	wss.rwmut.RLock()
+	defer wss.rwmut.RUnlock()
+
+	return wss.subscription[subscriptionID].AddSubscriber(client)
+}
+
+func (wss *WSSubscribers) RemoveClient(subscriptionID string, clientID int) {
+	wss.rwmut.RLock()
+	defer wss.rwmut.RUnlock()
+
+	wss.subscription[subscriptionID].RemoveSubscriber(clientID)
+}
+
+type Http struct {
+	port           int
+	router         *mux.Router
+	hrefs          []string
+	wotServers     map[string]*WotServer
+	wssSubscribers *WSSubscribers
+	actionResults  *ActionResults
 }
 
 // ----- Server API methods
@@ -38,10 +72,12 @@ type route struct {
 func NewHttp(port int) *Http {
 	// r.PathPrefix("/model").HandlerFunc(Model)
 	return &Http{
-		port:       port,
-		router:     mux.NewRouter().StrictSlash(true),
-		hrefs:      make([]string, 0),
-		wotServers: make(map[string]*WotServer),
+		port:           port,
+		router:         mux.NewRouter().StrictSlash(true),
+		hrefs:          make([]string, 0),
+		wotServers:     make(map[string]*WotServer),
+		wssSubscribers: NewWSSubscribers(),
+		actionResults:  NewActionResults(),
 	}
 }
 
@@ -61,186 +97,151 @@ func (p *Http) Start() {
 // ----- ThingDescription parser methods
 
 func (p *Http) createRoutes(ctxPath string, td *model.ThingDescription) {
-	var routes []*route
-	routes = make([]*route, 0)
-
-	routes = append(routes, p.rootPath(ctxPath, td))
-	routes = append(routes, p.descriptionPath(ctxPath, td))
-
-	for _, path := range p.propertiesPaths(ctxPath, td) {
-		routes = append(routes, path)
-	}
-
-	for _, path := range p.actionsPaths(ctxPath, td) {
-		routes = append(routes, path)
-	}
-
-	for _, path := range p.eventsPaths(ctxPath, td) {
-		routes = append(routes, path)
-	}
-
-	for _, route := range routes {
-		p.addRoute(route)
-	}
+	p.registerDeviceRoot(ctxPath, td)
+	p.registerDeviceDescriptor(ctxPath, td)
+	p.registerProperties(ctxPath, td)
+	p.registerActions(ctxPath, td)
+	p.registerEvents(ctxPath, td)
 }
 
-func (p *Http) addRoute(route *route) {
-	p.router.
-		Methods(route.method).
-		Path(route.pattern).
-		Name(route.name).
-		Handler(route.handlerFunc)
-}
-
-func (p *Http) rootPath(ctxPath string, td *model.ThingDescription) *route {
-	return &route{
+func (p *Http) registerDeviceRoot(ctxPath string, td *model.ThingDescription) {
+	p.addRoute(&route{
 		name:    "Index",
 		method:  "GET",
 		pattern: contextPath(ctxPath, ""),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "Device information for -> %s", td.Name)
 		},
-	}
+	})
 }
 
-func (p *Http) descriptionPath(ctxPath string, td *model.ThingDescription) *route {
-	return &route{
+func (p *Http) registerDeviceDescriptor(ctxPath string, td *model.ThingDescription) {
+	p.addRoute(&route{
 		name:    "model",
 		method:  "GET",
 		pattern: contextPath(ctxPath, "description"),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 			sendOK(w, td)
 		},
-	}
+	})
 }
 
-func (p *Http) propertiesPaths(ctxPath string, td *model.ThingDescription) []*route {
-	var routes []*route
-	routes = make([]*route, 0)
-
+func (p *Http) registerProperties(ctxPath string, td *model.ThingDescription) {
 	for _, prop := range td.Properties {
-		routes = append(routes, p.getPropertyPath(ctxPath, &prop))
+		p.addRoute(&route{
+			name:        prop.Name,
+			method:      "GET",
+			pattern:     contextPath(ctxPath, prop.Hrefs[0]),
+			handlerFunc: p.propertyGetHandler(ctxPath, &prop),
+		})
 
 		if prop.Writable {
-			routes = append(routes, p.setPropertyPath(ctxPath, &prop))
+			p.addRoute(&route{
+				name:        prop.Hrefs[0],
+				method:      "PUT",
+				pattern:     contextPath(ctxPath, prop.Hrefs[0]),
+				handlerFunc: p.propertySetHandler(ctxPath, &prop),
+			})
 		}
 	}
-
-	return routes
 }
 
-func (p *Http) getPropertyPath(ctxPath string, prop *model.Property) *route {
+func (p *Http) registerActions(ctxPath string, td *model.ThingDescription) {
+	for _, action := range td.Actions {
+		p.addRoute(&route{
+			name:        action.Hrefs[0],
+			method:      "POST",
+			pattern:     contextPath(ctxPath, action.Hrefs[0]),
+			handlerFunc: p.actionStartHandler(p.wotServers[ctxPath], action.Name),
+		})
+
+		p.addRoute(&route{
+			name:        str.Concat(action.Hrefs[0], "Task"),
+			method:      "GET",
+			pattern:     contextPath(ctxPath, str.Concat(action.Hrefs[0], "/{taskid}")),
+			handlerFunc: p.actionTaskHandler,
+		})
+	}
+}
+
+func (p *Http) registerEvents(ctxPath string, td *model.ThingDescription) {
+	for _, event := range td.Events {
+		p.addRoute(&route{
+			name:        event.Hrefs[0],
+			method:      "POST",
+			pattern:     contextPath(ctxPath, event.Hrefs[0]),
+			handlerFunc: p.eventSubscribeHandler(p.wotServers[ctxPath], event.Name),
+		})
+
+		p.addRoute(&route{
+			name:        str.Concat(event.Hrefs[0], "WebSocket"),
+			method:      "GET",
+			pattern:     contextPath(ctxPath, str.Concat(event.Hrefs[0], "/ws/{subscriptionID}")),
+			handlerFunc: p.eventClientHandler,
+		})
+	}
+}
+
+func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	e := Encoder(prop)
 
-	return &route{
-		name:    prop.Name,
-		method:  "GET",
-		pattern: contextPath(ctxPath, prop.Hrefs[0]),
-		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			name := prop.Name
-			promise, rc := p.wotServers[ctxPath].GetProperty(name)
+	return func(w http.ResponseWriter, r *http.Request) {
+		promise, rc := p.wotServers[ctxPath].GetProperty(prop.Name)
 
-			if rc == OK {
-				value := promise.Wait()
-				sendOK(w, e(value))
-			} else {
-				sendERR(w, rc)
-			}
-		},
+		if rc == OK {
+			value := promise.Wait()
+			sendOK(w, e(value))
+		} else {
+			sendERR(w, rc)
+		}
 	}
 }
 
-func (p *Http) setPropertyPath(ctxPath string, prop *model.Property) *route {
+func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	d := Decoder(prop)
 
-	return &route{
-		name:    prop.Hrefs[0],
-		method:  "PUT",
-		pattern: contextPath(ctxPath, prop.Hrefs[0]),
-		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			name := prop.Name
-			value := d(r.Body)
-			promise, rc := p.wotServers[ctxPath].SetProperty(name, value)
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := prop.Name
+		value := d(r.Body)
+		promise, rc := p.wotServers[ctxPath].SetProperty(name, value)
 
-			if rc == OK {
-				promise.Wait()
-			} else {
-				sendERR(w, rc)
-			}
-		},
+		if rc == OK {
+			promise.Wait()
+		} else {
+			sendERR(w, rc)
+		}
 	}
 }
 
-func (p *Http) actionsPaths(ctxPath string, td *model.ThingDescription) []*route {
-	var routes []*route
-	routes = make([]*route, 0)
+func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		//FIXME: fix action request deserialization
+		value := WotObject{}
+		json.NewDecoder(r.Body).Decode(&value)
 
-	for _, action := range td.Actions {
-		actionTaskPaths := make(map[string]*atomic.Value)
-		actionRoute, actionTaskRoute := p.actionPath(ctxPath, &action, actionTaskPaths)
-		routes = append(routes, actionRoute)
-		routes = append(routes, actionTaskRoute)
+		actionID, slot := p.actionResults.CreateSlot()
+		ash := NewActionStatusHandler(slot)
+
+		_, rc := wotServer.InvokeAction(actionName, value, ash)
+
+		if rc == OK {
+			sendOK(w, httpSubUrl(r, actionID))
+		} else {
+			sendERR(w, rc)
+		}
 	}
-
-	return routes
 }
 
-func (p *Http) actionPath(ctxPath string, action *model.Action, actionTaskPaths map[string]*atomic.Value) (*route, *route) {
-	actionRoute := &route{
-		name:    action.Hrefs[0],
-		method:  "POST",
-		pattern: contextPath(ctxPath, action.Hrefs[0]),
-		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			value := WotObject{}
-			json.NewDecoder(r.Body).Decode(&value)
+func (p *Http) actionTaskHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskid := vars["taskid"]
+	slot, rc := p.actionResults.GetSlot(taskid)
 
-			uuid, _ := sec.UUID4()
-			ash := newActionStatusHandler()
-			actionTaskPaths[uuid] = ash.Value
-
-			_, rc := p.wotServers[ctxPath].InvokeAction(action.Name, value, &ash)
-
-			if rc == OK {
-				sendOK(w, httpSubUrl(r, uuid))
-			} else {
-				sendERR(w, rc)
-			}
-		},
+	if rc {
+		sendOK(w, slot.Load())
+	} else {
+		sendERR(w, rc)
 	}
-
-	actionTaskRoute := &route{
-		name:    str.Concat(action.Hrefs[0], "Task"),
-		method:  "GET",
-		pattern: contextPath(ctxPath, str.Concat(action.Hrefs[0], "/{taskid}")),
-		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			vars := mux.Vars(r)
-			taskid := vars["taskid"]
-
-			value, rc := actionTaskPaths[taskid]
-
-			if rc {
-				sendOK(w, value.Load())
-			} else {
-				sendERR(w, rc)
-			}
-		},
-	}
-
-	return actionRoute, actionTaskRoute
-}
-
-func (p *Http) eventsPaths(ctxPath string, td *model.ThingDescription) []*route {
-	var routes []*route
-	routes = make([]*route, 0)
-
-	for _, event := range td.Events {
-		internalSubscribers := async.NewFanOut()
-		eventPath, eventWebSocketSubscription := p.eventPath(ctxPath, &event, internalSubscribers)
-		routes = append(routes, eventPath)
-		routes = append(routes, eventWebSocketSubscription)
-	}
-
-	return routes
 }
 
 var upgrader = websocket.Upgrader{
@@ -249,54 +250,42 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func (p *Http) eventPath(ctxPath string, event *model.Event, internalSubscribers *async.FanOut) (*route, *route) {
-	eventPath := &route{
-		name:    event.Hrefs[0],
-		method:  "POST",
-		pattern: contextPath(ctxPath, event.Hrefs[0]),
-		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			subscriptionID, _ := sec.UUID4()
+func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subscriptionID, _ := sec.UUID4()
+		clients := async.NewFanOut()
 
-			p.wotServers[ctxPath].AddListener(event.Name, p.eventHandler(subscriptionID, internalSubscribers))
+		p.wssSubscribers.CreateSubscription(subscriptionID, clients)
+		wotServer.AddListener(eventName, p.eventHandler(subscriptionID, clients))
 
-			//TODO: check for event existence
-			sendOK(w, websocketSubUrl(r, subscriptionID))
-		},
+		//TODO: check for event existence
+		sendOK(w, websocketSubUrl(r, subscriptionID))
+	}
+}
+
+func (p *Http) eventClientHandler(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+
+	if err != nil {
+		log.Println("Error creating WebSocket at: ", err)
+		return
 	}
 
-	eventWebSocketSubscription := &route{
-		name:    str.Concat(event.Hrefs[0], "WebSocket"),
-		method:  "GET",
-		pattern: contextPath(ctxPath, str.Concat(event.Hrefs[0], "/ws/{subscriptionID}")),
-		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			// we need subscriptionID to check if such a one exists
-			// vars := mux.Vars(r)
-			// subscriptionID := vars["subscriptionID"]
+	vars := mux.Vars(r)
+	subscriptionID := vars["subscriptionID"]
+	client := make(chan interface{})
+	clientID := p.wssSubscribers.AddClient(subscriptionID, client)
 
-			conn, err := upgrader.Upgrade(w, r, nil)
+	log.Println("Created internal subscriber subscriptionID: ", subscriptionID, " clientID: ", clientID)
 
-			if err != nil {
-				log.Println("Error creating WebSocket at: ", err)
-				return
-			}
-
-			eventSource := make(chan interface{})
-			internalSubscriptionID, _ := sec.UUID4()
-
-			log.Println("Created internal subscriber: ", internalSubscriptionID)
-			internalSubscribers.AddSubscriber(internalSubscriptionID, eventSource)
-
-			for event := range eventSource {
-				if err = conn.WriteJSON(event); err != nil {
-					internalSubscribers.RemoveSubscriber(internalSubscriptionID)
-					log.Println("Removed internal subscriber: ", internalSubscriptionID)
-					break
-				}
-			}
-		},
+	wsOpened := true
+	for event := range client {
+		if err = conn.WriteJSON(event); err != nil && wsOpened {
+			p.wssSubscribers.RemoveClient(subscriptionID, clientID)
+			log.Println("Removed internal subscriber subscriptionID: ", subscriptionID, " clientID: ", clientID)
+			wsOpened = false
+		}
 	}
-
-	return eventPath, eventWebSocketSubscription
 }
 
 type Event struct {
@@ -304,11 +293,11 @@ type Event struct {
 	Event     interface{} `json:"event,omitempty"`
 }
 
-func (p *Http) eventHandler(uuid string, internalSubscribers *async.FanOut) *EventListener {
+func (p *Http) eventHandler(uuid string, clients *async.FanOut) *EventListener {
 	el := &EventListener{
 		ID: uuid,
 		CB: func(event interface{}) {
-			internalSubscribers.Publish(event)
+			clients.Publish(event)
 		},
 	}
 
@@ -362,4 +351,19 @@ type Links struct {
 type Link struct {
 	Rel  string `json:"rel"`
 	Href string `json:"href"`
+}
+
+type route struct {
+	name        string
+	method      string
+	pattern     string
+	handlerFunc http.HandlerFunc
+}
+
+func (p *Http) addRoute(route *route) {
+	p.router.
+		Methods(route.method).
+		Path(route.pattern).
+		Name(route.name).
+		Handler(route.handlerFunc)
 }

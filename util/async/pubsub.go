@@ -5,35 +5,49 @@ import "sync"
 //TODO make performance and memmory tests to decide between go routines and mutexes
 
 type FanOut struct {
-	out   map[string]chan<- interface{}
-	mutex *sync.Mutex
+	out   map[int]chan<- interface{}
+	mutex *sync.RWMutex
 }
 
 func NewFanOut() *FanOut {
 	return &FanOut{
-		out:   make(map[string]chan<- interface{}),
-		mutex: &sync.Mutex{},
+		out:   make(map[int]chan<- interface{}),
+		mutex: &sync.RWMutex{},
 	}
 }
 
-func (fo *FanOut) AddSubscriber(id string, out chan<- interface{}) {
+func (fo *FanOut) AddSubscriber(out chan<- interface{}) int {
 	fo.mutex.Lock()
-	fo.out[id] = out
-	fo.mutex.Unlock()
+	defer fo.mutex.Unlock()
+
+	size := len(fo.out)
+	fo.out[size] = out
+
+	return size
 }
 
-func (fo *FanOut) RemoveSubscriber(id string) {
+func (fo *FanOut) RemoveSubscriber(id int) {
 	fo.mutex.Lock()
+	defer fo.mutex.Unlock()
+
+	close(fo.out[id])
 	delete(fo.out, id)
-	fo.mutex.Unlock()
+}
+
+func (fo *FanOut) RemoveAllSubscribes() {
+	fo.mutex.Lock()
+	defer fo.mutex.Unlock()
+
+	fo.out = make(map[int]chan<- interface{})
 }
 
 func (fo *FanOut) Publish(event interface{}) {
 	go func() {
-		fo.mutex.Lock()
+		fo.mutex.RLock()
+		defer fo.mutex.RUnlock()
+
 		for _, out := range fo.out {
 			out <- event
 		}
-		fo.mutex.Unlock()
 	}()
 }
