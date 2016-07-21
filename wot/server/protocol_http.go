@@ -148,7 +148,7 @@ func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w h
 		promise, rc := p.wotServers[ctxPath].GetProperty(prop.Name)
 
 		if rc == WOT_OK {
-			value := promise.Wait()
+			value := promise.Get()
 			sendOK(w, e(value))
 		} else {
 			sendERR(w, rc)
@@ -165,7 +165,7 @@ func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w h
 		promise, rc := p.wotServers[ctxPath].SetProperty(name, value)
 
 		if rc == WOT_OK {
-			promise.Wait()
+			promise.Get()
 		} else {
 			sendERR(w, rc)
 		}

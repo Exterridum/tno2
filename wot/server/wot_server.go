@@ -163,17 +163,17 @@ func (s *WotServer) InvokeAction(
 
 	actionHandler, ok := s.actionCB[actionName]
 
-	if ok {
-		callable := func(status async.StatusHandler) interface{} {
-			status.Schedule(arg)
-			actionHandler(arg, statusHandler)
-			return nil
-		}
-
-		return async.RunWithStatus(callable, statusHandler), WOT_OK
-	} else {
+	if !ok {
 		return nil, WOT_UNKNOWN_ACTION
 	}
+
+	callable := func(status async.StatusHandler) interface{} {
+		status.Schedule(arg)
+		actionHandler(arg, statusHandler)
+		return nil
+	}
+
+	return async.RunWithStatus(callable, statusHandler), WOT_OK
 }
 
 // ----- EVENTS HANDLING

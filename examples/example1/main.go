@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/wot/server"
 )
 
@@ -26,7 +27,7 @@ func (d *SampleDevice) Init(initParams map[string]interface{}, s *server.WotServ
 		return d.db["relay"]
 	}).OnUpdateProperty("relay", func(newValue interface{}) {
 		d.db["relay"] = newValue
-	}).OnInvokeAction("throtle-open", func(position interface{}, status concurent.StatusHandler) {
+	}).OnInvokeAction("throtle-open", func(position interface{}, status async.StatusHandler) {
 		// Validate input
 		targetPos := position.(int)
 		if targetPos < 0 || targetPos > 50 {

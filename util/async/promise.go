@@ -10,7 +10,7 @@ func Run(task func() interface{}) *Promise {
 	p := NewPromise()
 
 	go func() {
-		p.Channel() <- task()
+		p.pch <- task()
 	}()
 
 	return p
@@ -22,21 +22,17 @@ func NewPromise() *Promise {
 	}
 }
 
-func (p *Promise) Channel() chan<- interface{} {
-	return p.pch
-}
-
 func (prev *Promise) Then(callback func(response interface{}) interface{}) *Promise {
 	next := NewPromise()
 
 	go func() {
-		next.Channel() <- callback(<-prev.pch)
+		next.pch <- callback(<-prev.pch)
 	}()
 
 	return next
 }
 
-func (prev *Promise) Wait() interface{} {
+func (prev *Promise) Get() interface{} {
 	return <-prev.pch
 }
 
@@ -74,7 +70,7 @@ func RunWithStatus(task func(StatusHandler) interface{}, statusHandler StatusHan
 	p := NewStatusPromise(statusHandler)
 
 	go func() {
-		p.Channel() <- task(p.statusHandler)
+		p.pch <- task(p.statusHandler)
 	}()
 
 	return p
@@ -87,20 +83,16 @@ func NewStatusPromise(statusHandler StatusHandler) *StatusPromise {
 	}
 }
 
-func (p *StatusPromise) Channel() chan<- interface{} {
-	return p.pch
-}
-
 func (prev *StatusPromise) Then(callback func(interface{}, StatusHandler) interface{}) *StatusPromise {
 	next := NewStatusPromise(prev.statusHandler)
 
 	go func() {
-		next.Channel() <- callback(<-prev.pch, prev.statusHandler)
+		next.pch <- callback(<-prev.pch, prev.statusHandler)
 	}()
 
 	return next
 }
 
-func (prev *StatusPromise) Wait() interface{} {
+func (prev *StatusPromise) Get() interface{} {
 	return <-prev.pch
 }
