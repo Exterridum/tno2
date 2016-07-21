@@ -115,10 +115,17 @@ func (p *Http) registerActions(ctxPath string, td *model.ThingDescription) {
 		})
 
 		p.addRoute(&route{
-			name:        str.Concat(action.Hrefs[0], "Task"),
+			name:        str.Concat(action.Hrefs[0], "Task-Rest"),
 			method:      "GET",
 			pattern:     contextPath(ctxPath, str.Concat(action.Hrefs[0], "/{taskid}")),
 			handlerFunc: p.actionTaskHandler,
+		})
+
+		p.addRoute(&route{
+			name:        str.Concat(action.Hrefs[0], "Task-WS"),
+			method:      "GET",
+			pattern:     contextPath(ctxPath, str.Concat(action.Hrefs[0], "/ws/{taskid}")),
+			handlerFunc: p.actionWSTaskHandler,
 		})
 	}
 }
@@ -136,7 +143,7 @@ func (p *Http) registerEvents(ctxPath string, td *model.ThingDescription) {
 			name:        str.Concat(event.Hrefs[0], "WebSocket"),
 			method:      "GET",
 			pattern:     contextPath(ctxPath, str.Concat(event.Hrefs[0], "/ws/{subscriptionID}")),
-			handlerFunc: p.eventClientHandler,
+			handlerFunc: p.eventWSClientHandler,
 		})
 	}
 }
@@ -179,9 +186,11 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 		// json.NewDecoder(r.Body).Decode(&value)
 
 		actionID, slot := p.actionResults.CreateSlot()
-		ash := NewActionStatusHandler(slot)
+		clients := async.NewFanOut()
+		p.subscribers.CreateSubscription(actionID, clients)
+		ph := NewProgressHandler(slot, clients)
 
-		_, rc := wotServer.InvokeAction(actionName, value, ash)
+		_, rc := wotServer.InvokeAction(actionName, value, ph)
 
 		if rc == WOT_OK {
 			sendOK(w, httpSubUrl(r, actionID))
@@ -212,6 +221,9 @@ func (p *Http) actionTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (p *Http) actionWSTaskHandler(w http.ResponseWriter, r *http.Request) {
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -231,7 +243,7 @@ func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) fun
 	}
 }
 
-func (p *Http) eventClientHandler(w http.ResponseWriter, r *http.Request) {
+func (p *Http) eventWSClientHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {

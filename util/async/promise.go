@@ -43,20 +43,6 @@ type StatusPromise struct {
 	statusHandler StatusHandler
 }
 
-type TaskStatusCode int
-
-const (
-	TASK_SCHEDULED TaskStatusCode = iota
-	TASK_RUNNING
-	TASK_DONE
-	TASK_FAILED
-)
-
-type TaskStatus struct {
-	Code TaskStatusCode `json:"code"`
-	Data interface{}    `json:"data"`
-}
-
 type StatusHandler interface {
 	Schedule(interface{})
 	Update(interface{})
