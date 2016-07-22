@@ -2,20 +2,23 @@ package codec
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"io/ioutil"
+
+	"github.com/conas/tno2/util/str"
 )
 
 // ----- CODEC TYPES
 
-type MediaType string
+type Encoding string
 
 const (
-	MEDIA_TYPE_JSON MediaType = "application/json"
+	ENCODING_JSON Encoding = "JSON"
 )
 
 type Codec interface {
-	Info() MediaType
+	Info() Encoding
 	Marshal(io.Writer, interface{}) error
 	Unmarshal(io.Reader, interface{}) error
 }
@@ -28,8 +31,8 @@ func NewJsonCodec() *JsonCodec {
 	return &JsonCodec{}
 }
 
-func (c *JsonCodec) Info() MediaType {
-	return MEDIA_TYPE_JSON
+func (c *JsonCodec) Info() Encoding {
+	return ENCODING_JSON
 }
 
 func (c *JsonCodec) Marshal(w io.Writer, v interface{}) error {
@@ -46,10 +49,10 @@ func (c *JsonCodec) Unmarshal(r io.Reader, t interface{}) error {
 	err = json.Unmarshal(data, t)
 
 	if err != nil {
-		return err
+		return errors.New(str.Concat("Error unmarshaling input using ", c.Info(), " codec."))
 	}
 
-	return err
+	return nil
 }
 
 // ----- COMMON

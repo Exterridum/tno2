@@ -17,7 +17,7 @@ import (
 
 type WotServer struct {
 	td        *model.ThingDescription
-	codecs    map[codec.MediaType]codec.Codec
+	codecs    map[codec.Encoding]codec.Codec
 	propGetCB map[string]func() interface{}
 	propSetCB map[string]func(interface{})
 	actionCB  map[string]ActionHandler
@@ -64,7 +64,7 @@ func CreateFromDescriptionUri(uri string) *WotServer {
 func CreateFromDescription(td *model.ThingDescription) *WotServer {
 	return &WotServer{
 		td:        td,
-		codecs:    make(map[codec.MediaType]codec.Codec),
+		codecs:    make(map[codec.Encoding]codec.Codec),
 		propGetCB: make(map[string]func() interface{}),
 		propSetCB: make(map[string]func(interface{})),
 		actionCB:  make(map[string]ActionHandler),
@@ -81,11 +81,11 @@ func (s *WotServer) AddCodec(codec codec.Codec) {
 	s.codecs[codec.Info()] = codec
 }
 
-func (s *WotServer) GetCodec(mediaType codec.MediaType) (codec.Codec, error) {
-	codec, ok := s.codecs[mediaType]
+func (s *WotServer) GetCodec(encoding codec.Encoding) (codec.Codec, error) {
+	codec, ok := s.codecs[encoding]
 
 	if !ok {
-		return nil, errors.New(str.Concat("Unsupported media type", mediaType))
+		return nil, errors.New(str.Concat("Unsupported encoding: ", encoding))
 	}
 
 	return codec, nil

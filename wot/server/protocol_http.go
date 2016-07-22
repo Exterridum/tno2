@@ -89,7 +89,7 @@ func (p *Http) registerDeviceRoot(ctxPath string, td *model.ThingDescription) {
 		method:  "GET",
 		pattern: contextPath(ctxPath, ""),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			codec, err := p.getCodec(ctxPath, codec.MEDIA_TYPE_JSON)
+			codec, err := p.getCodec(ctxPath, codec.ENCODING_JSON)
 
 			if err != nil {
 				sendJsonERR(w, err)
@@ -109,7 +109,7 @@ func (p *Http) registerDeviceDescriptor(ctxPath string, td *model.ThingDescripti
 		method:  "GET",
 		pattern: contextPath(ctxPath, "description"),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			codec, err := p.getCodec(ctxPath, codec.MEDIA_TYPE_JSON)
+			codec, err := p.getCodec(ctxPath, codec.ENCODING_JSON)
 
 			if err != nil {
 				sendJsonERR(w, err)
@@ -200,7 +200,7 @@ func (w *WotObject) GetValue() interface{} {
 
 func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		codec, err := p.getCodec(ctxPath, codec.MEDIA_TYPE_JSON)
+		codec, err := p.getCodec(ctxPath, codec.ENCODING_JSON)
 
 		if err != nil {
 			sendJsonERR(w, err)
@@ -220,7 +220,7 @@ func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w h
 
 func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		codec, err := p.getCodec(ctxPath, codec.MEDIA_TYPE_JSON)
+		codec, err := p.getCodec(ctxPath, codec.ENCODING_JSON)
 
 		if err != nil {
 			sendJsonERR(w, err)
@@ -245,13 +245,13 @@ func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w h
 	}
 }
 
-func (p *Http) getCodec(ctxPath string, mediaType codec.MediaType) (codec.Codec, error) {
-	return p.wotServers[ctxPath].GetCodec(mediaType)
+func (p *Http) getCodec(ctxPath string, encoding codec.Encoding) (codec.Codec, error) {
+	return p.wotServers[ctxPath].GetCodec(encoding)
 }
 
 func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		codec, err := wotServer.GetCodec(codec.MEDIA_TYPE_JSON)
+		codec, err := wotServer.GetCodec(codec.ENCODING_JSON)
 
 		if err != nil {
 			sendJsonERR(w, err)
@@ -283,7 +283,7 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 
 func (p *Http) actionTaskHandler(wotServer *WotServer) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		codec, err := wotServer.GetCodec(codec.MEDIA_TYPE_JSON)
+		codec, err := wotServer.GetCodec(codec.ENCODING_JSON)
 
 		if err != nil {
 			sendJsonERR(w, err)
@@ -339,7 +339,7 @@ var upgrader = websocket.Upgrader{
 
 func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		codec, err := wotServer.GetCodec(codec.MEDIA_TYPE_JSON)
+		codec, err := wotServer.GetCodec(codec.ENCODING_JSON)
 
 		if err != nil {
 			sendJsonERR(w, err)
@@ -464,14 +464,24 @@ func sendJsonERR(w http.ResponseWriter, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 
-	json.NewEncoder(w).Encode(payload)
+	switch payload.(type) {
+	default:
+		json.NewEncoder(w).Encode(payload)
+	case error:
+		json.NewEncoder(w).Encode(payload.(error).Error())
+	}
 }
 
 func sendERR(w http.ResponseWriter, codec codec.Codec, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 
-	codec.Marshal(w, payload)
+	switch payload.(type) {
+	default:
+		codec.Marshal(w, payload)
+	case error:
+		codec.Marshal(w, payload.(error).Error())
+	}
 }
 
 type Links struct {
