@@ -1,4 +1,4 @@
-package codec
+package encoder
 
 import (
 	"encoding/json"
@@ -17,7 +17,7 @@ const (
 	ENCODING_JSON Encoding = "JSON"
 )
 
-type Codec interface {
+type Encoder interface {
 	Info() Encoding
 	Marshal(io.Writer, interface{}) error
 	Unmarshal(io.Reader, interface{}) error
@@ -25,21 +25,21 @@ type Codec interface {
 
 // ----- JSON CODEC
 
-type JsonCodec struct{}
+type JsonEncoder struct{}
 
-func NewJsonCodec() *JsonCodec {
-	return &JsonCodec{}
+func NewJsonEncoder() *JsonEncoder {
+	return &JsonEncoder{}
 }
 
-func (c *JsonCodec) Info() Encoding {
+func (c *JsonEncoder) Info() Encoding {
 	return ENCODING_JSON
 }
 
-func (c *JsonCodec) Marshal(w io.Writer, v interface{}) error {
+func (c *JsonEncoder) Marshal(w io.Writer, v interface{}) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-func (c *JsonCodec) Unmarshal(r io.Reader, t interface{}) error {
+func (c *JsonEncoder) Unmarshal(r io.Reader, t interface{}) error {
 	data, err := ReaderToByteArray(r)
 
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/util/sec"
 	"github.com/conas/tno2/util/str"
-	"github.com/conas/tno2/wot/codec"
+	"github.com/conas/tno2/wot/encoder"
 	"github.com/conas/tno2/wot/model"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -89,7 +89,7 @@ func (p *Http) registerDeviceRoot(ctxPath string, td *model.ThingDescription) {
 		method:  "GET",
 		pattern: contextPath(ctxPath, ""),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			codec, err := p.getCodec(ctxPath, codec.ENCODING_JSON)
+			codec, err := p.getCodec(ctxPath, encoder.ENCODING_JSON)
 
 			if err != nil {
 				sendJsonERR(w, err)
@@ -109,7 +109,7 @@ func (p *Http) registerDeviceDescriptor(ctxPath string, td *model.ThingDescripti
 		method:  "GET",
 		pattern: contextPath(ctxPath, "description"),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			codec, err := p.getCodec(ctxPath, codec.ENCODING_JSON)
+			codec, err := p.getCodec(ctxPath, encoder.ENCODING_JSON)
 
 			if err != nil {
 				sendJsonERR(w, err)
@@ -163,7 +163,7 @@ func (p *Http) registerActions(ctxPath string, td *model.ThingDescription) {
 			name:        str.Concat(action.Hrefs[0], "Task-WS"),
 			method:      "GET",
 			pattern:     contextPath(ctxPath, str.Concat(action.Hrefs[0], "/ws/{taskid}")),
-			handlerFunc: p.actionWSTaskHandler,
+			handlerFunc: p.actionWSTaskHandler(p.wotServers[ctxPath]),
 		})
 
 		action.Hrefs[0] = str.Concat(hostname, ctxPath, "/", action.Hrefs[0])
@@ -183,7 +183,7 @@ func (p *Http) registerEvents(ctxPath string, td *model.ThingDescription) {
 			name:        str.Concat(event.Hrefs[0], "WebSocket"),
 			method:      "GET",
 			pattern:     contextPath(ctxPath, str.Concat(event.Hrefs[0], "/ws/{subscriptionID}")),
-			handlerFunc: p.eventWSClientHandler,
+			handlerFunc: p.eventWSClientHandler(p.wotServers[ctxPath]),
 		})
 
 		event.Hrefs[0] = str.Concat(hostname, ctxPath, "/", event.Hrefs[0])
@@ -200,7 +200,7 @@ func (w *WotObject) GetValue() interface{} {
 
 func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		codec, err := p.getCodec(ctxPath, codec.ENCODING_JSON)
+		encoder, err := p.getCodec(ctxPath, encoder.ENCODING_JSON)
 
 		if err != nil {
 			sendJsonERR(w, err)
@@ -211,16 +211,16 @@ func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w h
 
 		if rc == WOT_OK {
 			value := promise.Get()
-			sendOK(w, codec, value)
+			sendOK(w, encoder, value)
 		} else {
-			sendERR(w, codec, rc)
+			sendERR(w, encoder, rc)
 		}
 	}
 }
 
 func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		codec, err := p.getCodec(ctxPath, codec.ENCODING_JSON)
+		encoder, err := p.getCodec(ctxPath, encoder.ENCODING_JSON)
 
 		if err != nil {
 			sendJsonERR(w, err)
@@ -228,10 +228,10 @@ func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w h
 		}
 
 		wo := &WotObject{}
-		err = codec.Unmarshal(r.Body, wo)
+		err = encoder.Unmarshal(r.Body, wo)
 
 		if err != nil {
-			sendERR(w, codec, err)
+			sendERR(w, encoder, err)
 			return
 		}
 
@@ -240,18 +240,18 @@ func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w h
 		if rc == WOT_OK {
 			promise.Get()
 		} else {
-			sendERR(w, codec, rc)
+			sendERR(w, encoder, rc)
 		}
 	}
 }
 
-func (p *Http) getCodec(ctxPath string, encoding codec.Encoding) (codec.Codec, error) {
-	return p.wotServers[ctxPath].GetCodec(encoding)
+func (p *Http) getCodec(ctxPath string, encoding encoder.Encoding) (encoder.Encoder, error) {
+	return p.wotServers[ctxPath].GetEncoder(encoding)
 }
 
 func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		codec, err := wotServer.GetCodec(codec.ENCODING_JSON)
+		encoder, err := wotServer.GetEncoder(encoder.ENCODING_JSON)
 
 		if err != nil {
 			sendJsonERR(w, err)
@@ -259,10 +259,10 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 		}
 
 		wo := WotObject{}
-		err = codec.Unmarshal(r.Body, &wo)
+		err = encoder.Unmarshal(r.Body, &wo)
 
 		if err != nil {
-			sendERR(w, codec, err)
+			sendERR(w, encoder, err)
 			return
 		}
 
@@ -274,16 +274,16 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 
 		if rc == WOT_OK {
 			hrefs := links(websocketSubUrl(r, actionID), httpSubUrl(r, actionID))
-			sendOK(w, codec, hrefs)
+			sendOK(w, encoder, hrefs)
 		} else {
-			sendERR(w, codec, rc)
+			sendERR(w, encoder, rc)
 		}
 	}
 }
 
 func (p *Http) actionTaskHandler(wotServer *WotServer) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		codec, err := wotServer.GetCodec(codec.ENCODING_JSON)
+		encoder, err := wotServer.GetEncoder(encoder.ENCODING_JSON)
 
 		if err != nil {
 			sendJsonERR(w, err)
@@ -295,20 +295,29 @@ func (p *Http) actionTaskHandler(wotServer *WotServer) func(http.ResponseWriter,
 		slot, rc := p.actionResults.GetSlot(taskid)
 
 		if rc {
-			sendOK(w, codec, slot.Load())
+			sendOK(w, encoder, slot.Load())
 		} else {
-			sendERR(w, codec, rc)
+			sendERR(w, encoder, rc)
 		}
 	}
 }
 
-func (p *Http) actionWSTaskHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	taskid := vars["taskid"]
-	p.wsHandler(taskid, w, r)
+func (p *Http) actionWSTaskHandler(wotServer *WotServer) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		taskid := vars["taskid"]
+		p.wsHandler(wotServer, taskid, w, r)
+	}
 }
 
-func (p *Http) wsHandler(handlerId string, w http.ResponseWriter, r *http.Request) {
+func (p *Http) wsHandler(wotServer *WotServer, handlerId string, w http.ResponseWriter, r *http.Request) {
+	encoder, err := wotServer.GetEncoder(encoder.ENCODING_JSON)
+
+	if err != nil {
+		sendJsonERR(w, err)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
@@ -323,12 +332,26 @@ func (p *Http) wsHandler(handlerId string, w http.ResponseWriter, r *http.Reques
 
 	wsOpened := true
 	for event := range client {
-		if err = conn.WriteJSON(event); err != nil && wsOpened {
+		if err = writeJSON(conn, encoder, event); err != nil && wsOpened {
 			p.subscribers.RemoveClient(handlerId, clientID)
 			log.Println("Removed internal subscriber handlerId: ", handlerId, " clientID: ", clientID)
 			wsOpened = false
 		}
 	}
+}
+
+// CREDIT TO Gorilla websocket library
+func writeJSON(wsc *websocket.Conn, codec encoder.Encoder, v interface{}) error {
+	w, err := wsc.NextWriter(websocket.TextMessage)
+	if err != nil {
+		return err
+	}
+	err1 := codec.Marshal(w, v)
+	err2 := w.Close()
+	if err1 != nil {
+		return err1
+	}
+	return err2
 }
 
 var upgrader = websocket.Upgrader{
@@ -339,7 +362,7 @@ var upgrader = websocket.Upgrader{
 
 func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		codec, err := wotServer.GetCodec(codec.ENCODING_JSON)
+		encoder, err := wotServer.GetEncoder(encoder.ENCODING_JSON)
 
 		if err != nil {
 			sendJsonERR(w, err)
@@ -353,14 +376,16 @@ func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) fun
 		wotServer.AddListener(eventName, p.eventHandler(subscriptionID, clients))
 
 		hrefs := links(websocketSubUrl(r, subscriptionID))
-		sendOK(w, codec, hrefs)
+		sendOK(w, encoder, hrefs)
 	}
 }
 
-func (p *Http) eventWSClientHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	subscriptionID := vars["subscriptionID"]
-	p.wsHandler(subscriptionID, w, r)
+func (p *Http) eventWSClientHandler(wotServer *WotServer) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		subscriptionID := vars["subscriptionID"]
+		p.wsHandler(wotServer, subscriptionID, w, r)
+	}
 }
 
 func (p *Http) eventHandler(uuid string, clients *async.FanOut) *EventListener {
@@ -446,7 +471,7 @@ func contextPath(ctxPath, element string) string {
 	return str.Concat(ctxPath, "/", element)
 }
 
-func sendOK(w http.ResponseWriter, codec codec.Codec, payload interface{}) {
+func sendOK(w http.ResponseWriter, codec encoder.Encoder, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
@@ -472,15 +497,15 @@ func sendJsonERR(w http.ResponseWriter, payload interface{}) {
 	}
 }
 
-func sendERR(w http.ResponseWriter, codec codec.Codec, payload interface{}) {
+func sendERR(w http.ResponseWriter, encoder encoder.Encoder, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 
 	switch payload.(type) {
 	default:
-		codec.Marshal(w, payload)
+		encoder.Marshal(w, payload)
 	case error:
-		codec.Marshal(w, payload.(error).Error())
+		encoder.Marshal(w, payload.(error).Error())
 	}
 }
 

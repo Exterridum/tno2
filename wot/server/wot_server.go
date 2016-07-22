@@ -7,7 +7,7 @@ import (
 
 	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/util/str"
-	"github.com/conas/tno2/wot/codec"
+	"github.com/conas/tno2/wot/encoder"
 	"github.com/conas/tno2/wot/model"
 )
 
@@ -17,7 +17,7 @@ import (
 
 type WotServer struct {
 	td        *model.ThingDescription
-	codecs    map[codec.Encoding]codec.Codec
+	encoders  map[encoder.Encoding]encoder.Encoder
 	propGetCB map[string]func() interface{}
 	propSetCB map[string]func(interface{})
 	actionCB  map[string]ActionHandler
@@ -64,7 +64,7 @@ func CreateFromDescriptionUri(uri string) *WotServer {
 func CreateFromDescription(td *model.ThingDescription) *WotServer {
 	return &WotServer{
 		td:        td,
-		codecs:    make(map[codec.Encoding]codec.Codec),
+		encoders:  make(map[encoder.Encoding]encoder.Encoder),
 		propGetCB: make(map[string]func() interface{}),
 		propSetCB: make(map[string]func(interface{})),
 		actionCB:  make(map[string]ActionHandler),
@@ -73,22 +73,22 @@ func CreateFromDescription(td *model.ThingDescription) *WotServer {
 }
 
 func (s *WotServer) Connect(d Device, initParams map[string]interface{}) {
-	s.AddCodec(codec.NewJsonCodec())
+	s.AddEncoder(encoder.NewJsonEncoder())
 	d.Init(initParams, s)
 }
 
-func (s *WotServer) AddCodec(codec codec.Codec) {
-	s.codecs[codec.Info()] = codec
+func (s *WotServer) AddEncoder(encoder encoder.Encoder) {
+	s.encoders[encoder.Info()] = encoder
 }
 
-func (s *WotServer) GetCodec(encoding codec.Encoding) (codec.Codec, error) {
-	codec, ok := s.codecs[encoding]
+func (s *WotServer) GetEncoder(encoding encoder.Encoding) (encoder.Encoder, error) {
+	encoder, ok := s.encoders[encoding]
 
 	if !ok {
 		return nil, errors.New(str.Concat("Unsupported encoding: ", encoding))
 	}
 
-	return codec, nil
+	return encoder, nil
 }
 
 //FIXME: Create model metadata with map
@@ -174,7 +174,6 @@ func (s *WotServer) AddAction(actionName string, inputType interface{}, outputTy
 func (s *WotServer) OnInvokeAction(
 	actionName string,
 	actionHandler ActionHandler) *WotServer {
-	log.Print("Server -> ", s.GetDescription().Name, " OnInvokeAction actionName: ", actionName)
 
 	s.actionCB[actionName] = actionHandler
 	return s
@@ -212,6 +211,7 @@ func (s *WotServer) AddListener(eventName string, listener *EventListener) *WotS
 }
 
 func (s *WotServer) RemoveListener(eventName string, listener func(interface{})) *WotServer {
+	//FIXME: How to identify which listener to remove
 	delete(s.eventsCB, eventName)
 	return s
 }
@@ -239,6 +239,5 @@ func (s *WotServer) EmitEvent(eventName string, payload interface{}) (*async.Pro
 		}), WOT_OK
 	}
 
-	//TODO implement completed promise
 	return nil, WOT_OK
 }
