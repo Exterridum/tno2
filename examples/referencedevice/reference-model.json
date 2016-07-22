@@ -3,7 +3,7 @@
         "http://w3c.github.io/wot/w3c-wot-td-context.jsonld"
     ],
     "@type": "Thing",
-    "name": "simple-event",
+    "name": "reference-thing",
     "uris": [],
     "encodings": [
         "JSON"

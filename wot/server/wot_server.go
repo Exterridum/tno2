@@ -1,10 +1,13 @@
 package server
 
 import (
+	"errors"
 	"log"
 	"time"
 
 	"github.com/conas/tno2/util/async"
+	"github.com/conas/tno2/util/str"
+	"github.com/conas/tno2/wot/codec"
 	"github.com/conas/tno2/wot/model"
 )
 
@@ -14,6 +17,7 @@ import (
 
 type WotServer struct {
 	td        *model.ThingDescription
+	codecs    map[codec.MediaType]codec.Codec
 	propGetCB map[string]func() interface{}
 	propSetCB map[string]func(interface{})
 	actionCB  map[string]ActionHandler
@@ -22,6 +26,10 @@ type WotServer struct {
 
 type Device interface {
 	Init(initParams map[string]interface{}, s *WotServer)
+}
+
+type Request interface {
+	GetValue() interface{}
 }
 
 type ActionHandler func(interface{}, async.StatusHandler)
@@ -56,6 +64,7 @@ func CreateFromDescriptionUri(uri string) *WotServer {
 func CreateFromDescription(td *model.ThingDescription) *WotServer {
 	return &WotServer{
 		td:        td,
+		codecs:    make(map[codec.MediaType]codec.Codec),
 		propGetCB: make(map[string]func() interface{}),
 		propSetCB: make(map[string]func(interface{})),
 		actionCB:  make(map[string]ActionHandler),
@@ -64,7 +73,22 @@ func CreateFromDescription(td *model.ThingDescription) *WotServer {
 }
 
 func (s *WotServer) Connect(d Device, initParams map[string]interface{}) {
+	s.AddCodec(codec.NewJsonCodec())
 	d.Init(initParams, s)
+}
+
+func (s *WotServer) AddCodec(codec codec.Codec) {
+	s.codecs[codec.Info()] = codec
+}
+
+func (s *WotServer) GetCodec(mediaType codec.MediaType) (codec.Codec, error) {
+	codec, ok := s.codecs[mediaType]
+
+	if !ok {
+		return nil, errors.New(str.Concat("Unsupported media type", mediaType))
+	}
+
+	return codec, nil
 }
 
 //FIXME: Create model metadata with map
