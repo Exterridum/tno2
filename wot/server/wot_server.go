@@ -1,13 +1,10 @@
 package server
 
 import (
-	"errors"
 	"log"
 	"time"
 
 	"github.com/conas/tno2/util/async"
-	"github.com/conas/tno2/util/str"
-	"github.com/conas/tno2/wot/encoder"
 	"github.com/conas/tno2/wot/model"
 )
 
@@ -17,7 +14,6 @@ import (
 
 type WotServer struct {
 	td        *model.ThingDescription
-	encoders  map[encoder.Encoding]encoder.Encoder
 	propGetCB map[string]func() interface{}
 	propSetCB map[string]func(interface{})
 	actionCB  map[string]ActionHandler
@@ -26,10 +22,6 @@ type WotServer struct {
 
 type Device interface {
 	Init(initParams map[string]interface{}, s *WotServer)
-}
-
-type Request interface {
-	GetValue() interface{}
 }
 
 type ActionHandler func(interface{}, async.StatusHandler)
@@ -64,7 +56,6 @@ func CreateFromDescriptionUri(uri string) *WotServer {
 func CreateFromDescription(td *model.ThingDescription) *WotServer {
 	return &WotServer{
 		td:        td,
-		encoders:  make(map[encoder.Encoding]encoder.Encoder),
 		propGetCB: make(map[string]func() interface{}),
 		propSetCB: make(map[string]func(interface{})),
 		actionCB:  make(map[string]ActionHandler),
@@ -73,22 +64,7 @@ func CreateFromDescription(td *model.ThingDescription) *WotServer {
 }
 
 func (s *WotServer) Connect(d Device, initParams map[string]interface{}) {
-	s.AddEncoder(encoder.NewJsonEncoder())
 	d.Init(initParams, s)
-}
-
-func (s *WotServer) AddEncoder(encoder encoder.Encoder) {
-	s.encoders[encoder.Info()] = encoder
-}
-
-func (s *WotServer) GetEncoder(encoding encoder.Encoding) (encoder.Encoder, error) {
-	encoder, ok := s.encoders[encoding]
-
-	if !ok {
-		return nil, errors.New(str.Concat("Unsupported encoding: ", encoding))
-	}
-
-	return encoder, nil
 }
 
 //FIXME: Create model metadata with map

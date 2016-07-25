@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
@@ -15,8 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// FIXME:
-// 1. Too much repetititve code regarding codec handling
+// FIXMEs:
 
 type Http struct {
 	port          int
@@ -47,7 +45,13 @@ func (p *Http) Bind(ctxPath string, s *WotServer) {
 	td := s.GetDescription()
 	p.wotServers[ctxPath] = s
 	p.createRoutes(ctxPath, td)
+
+	updateThingDescription(ctxPath, td)
+}
+
+func updateThingDescription(ctxPath string, td *model.ThingDescription) {
 	td.Uris = append(td.Uris, str.Concat(hostname, ctxPath))
+	td.Encodings = encoder.Registry.Registered()
 }
 
 func (p *Http) Start() {
@@ -68,7 +72,6 @@ func (p *Http) createRoutes(ctxPath string, td *model.ThingDescription) {
 
 func (p *Http) registerRoot() {
 	p.addRoute(&route{
-		name:    "index",
 		method:  "GET",
 		pattern: "/",
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
@@ -78,45 +81,29 @@ func (p *Http) registerRoot() {
 				ls.Links = append(ls.Links, httpSubUrl(r, path))
 			}
 
-			sendJsonOK(w, ls)
+			sendOK(w, r, ls)
 		},
 	})
 }
 
 func (p *Http) registerDeviceRoot(ctxPath string, td *model.ThingDescription) {
 	p.addRoute(&route{
-		name:    td.Name,
 		method:  "GET",
 		pattern: contextPath(ctxPath, ""),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			codec, err := p.getCodec(ctxPath, encoder.ENCODING_JSON)
-
-			if err != nil {
-				sendJsonERR(w, err)
-				return
-			}
-
 			hrefs := links(httpSubUrl(r, "description"))
 
-			sendOK(w, codec, hrefs)
+			sendOK(w, r, hrefs)
 		},
 	})
 }
 
 func (p *Http) registerDeviceDescriptor(ctxPath string, td *model.ThingDescription) {
 	p.addRoute(&route{
-		name:    str.Concat(td.Name, "-descriptor"),
 		method:  "GET",
 		pattern: contextPath(ctxPath, "description"),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			codec, err := p.getCodec(ctxPath, encoder.ENCODING_JSON)
-
-			if err != nil {
-				sendJsonERR(w, err)
-				return
-			}
-
-			sendOK(w, codec, td)
+			sendOK(w, r, td)
 		},
 	})
 }
@@ -124,7 +111,6 @@ func (p *Http) registerDeviceDescriptor(ctxPath string, td *model.ThingDescripti
 func (p *Http) registerProperties(ctxPath string, td *model.ThingDescription) {
 	for _, prop := range td.Properties {
 		p.addRoute(&route{
-			name:        prop.Name,
 			method:      "GET",
 			pattern:     contextPath(ctxPath, prop.Hrefs[0]),
 			handlerFunc: p.propertyGetHandler(ctxPath, &prop),
@@ -132,7 +118,6 @@ func (p *Http) registerProperties(ctxPath string, td *model.ThingDescription) {
 
 		if prop.Writable {
 			p.addRoute(&route{
-				name:        prop.Hrefs[0],
 				method:      "PUT",
 				pattern:     contextPath(ctxPath, prop.Hrefs[0]),
 				handlerFunc: p.propertySetHandler(ctxPath, &prop),
@@ -146,21 +131,18 @@ func (p *Http) registerProperties(ctxPath string, td *model.ThingDescription) {
 func (p *Http) registerActions(ctxPath string, td *model.ThingDescription) {
 	for _, action := range td.Actions {
 		p.addRoute(&route{
-			name:        action.Hrefs[0],
 			method:      "POST",
 			pattern:     contextPath(ctxPath, action.Hrefs[0]),
 			handlerFunc: p.actionStartHandler(p.wotServers[ctxPath], action.Name),
 		})
 
 		p.addRoute(&route{
-			name:        str.Concat(action.Hrefs[0], "Task-Rest"),
 			method:      "GET",
 			pattern:     contextPath(ctxPath, str.Concat(action.Hrefs[0], "/{taskid}")),
 			handlerFunc: p.actionTaskHandler(p.wotServers[ctxPath]),
 		})
 
 		p.addRoute(&route{
-			name:        str.Concat(action.Hrefs[0], "Task-WS"),
 			method:      "GET",
 			pattern:     contextPath(ctxPath, str.Concat(action.Hrefs[0], "/ws/{taskid}")),
 			handlerFunc: p.actionWSTaskHandler(p.wotServers[ctxPath]),
@@ -173,14 +155,12 @@ func (p *Http) registerActions(ctxPath string, td *model.ThingDescription) {
 func (p *Http) registerEvents(ctxPath string, td *model.ThingDescription) {
 	for _, event := range td.Events {
 		p.addRoute(&route{
-			name:        event.Hrefs[0],
 			method:      "POST",
 			pattern:     contextPath(ctxPath, event.Hrefs[0]),
 			handlerFunc: p.eventSubscribeHandler(p.wotServers[ctxPath], event.Name),
 		})
 
 		p.addRoute(&route{
-			name:        str.Concat(event.Hrefs[0], "WebSocket"),
 			method:      "GET",
 			pattern:     contextPath(ctxPath, str.Concat(event.Hrefs[0], "/ws/{subscriptionID}")),
 			handlerFunc: p.eventWSClientHandler(p.wotServers[ctxPath]),
@@ -200,38 +180,24 @@ func (w *WotObject) GetValue() interface{} {
 
 func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		encoder, err := p.getCodec(ctxPath, encoder.ENCODING_JSON)
-
-		if err != nil {
-			sendJsonERR(w, err)
-			return
-		}
-
 		promise, rc := p.wotServers[ctxPath].GetProperty(prop.Name)
 
 		if rc == WOT_OK {
 			value := promise.Get()
-			sendOK(w, encoder, value)
+			sendOK(w, r, value)
 		} else {
-			sendERR(w, encoder, rc)
+			sendERR(w, r, rc)
 		}
 	}
 }
 
 func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		encoder, err := p.getCodec(ctxPath, encoder.ENCODING_JSON)
+		wo := WotObject{}
+		err := readBody(r, &wo)
 
 		if err != nil {
-			sendJsonERR(w, err)
-			return
-		}
-
-		wo := &WotObject{}
-		err = encoder.Unmarshal(r.Body, wo)
-
-		if err != nil {
-			sendERR(w, encoder, err)
+			sendPlainERR(w, err)
 			return
 		}
 
@@ -240,29 +206,18 @@ func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w h
 		if rc == WOT_OK {
 			promise.Get()
 		} else {
-			sendERR(w, encoder, rc)
+			sendERR(w, r, rc)
 		}
 	}
 }
 
-func (p *Http) getCodec(ctxPath string, encoding encoder.Encoding) (encoder.Encoder, error) {
-	return p.wotServers[ctxPath].GetEncoder(encoding)
-}
-
 func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		encoder, err := wotServer.GetEncoder(encoder.ENCODING_JSON)
-
-		if err != nil {
-			sendJsonERR(w, err)
-			return
-		}
-
 		wo := WotObject{}
-		err = encoder.Unmarshal(r.Body, &wo)
+		err := readBody(r, &wo)
 
 		if err != nil {
-			sendERR(w, encoder, err)
+			sendPlainERR(w, err)
 			return
 		}
 
@@ -274,30 +229,23 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 
 		if rc == WOT_OK {
 			hrefs := links(websocketSubUrl(r, actionID), httpSubUrl(r, actionID))
-			sendOK(w, encoder, hrefs)
+			sendOK(w, r, hrefs)
 		} else {
-			sendERR(w, encoder, rc)
+			sendERR(w, r, rc)
 		}
 	}
 }
 
 func (p *Http) actionTaskHandler(wotServer *WotServer) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		encoder, err := wotServer.GetEncoder(encoder.ENCODING_JSON)
-
-		if err != nil {
-			sendJsonERR(w, err)
-			return
-		}
-
 		vars := mux.Vars(r)
 		taskid := vars["taskid"]
 		slot, rc := p.actionResults.GetSlot(taskid)
 
 		if rc {
-			sendOK(w, encoder, slot.Load())
+			sendOK(w, r, slot.Load())
 		} else {
-			sendERR(w, encoder, rc)
+			sendERR(w, r, rc)
 		}
 	}
 }
@@ -311,13 +259,6 @@ func (p *Http) actionWSTaskHandler(wotServer *WotServer) func(w http.ResponseWri
 }
 
 func (p *Http) wsHandler(wotServer *WotServer, handlerId string, w http.ResponseWriter, r *http.Request) {
-	encoder, err := wotServer.GetEncoder(encoder.ENCODING_JSON)
-
-	if err != nil {
-		sendJsonERR(w, err)
-		return
-	}
-
 	conn, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
@@ -332,7 +273,7 @@ func (p *Http) wsHandler(wotServer *WotServer, handlerId string, w http.Response
 
 	wsOpened := true
 	for event := range client {
-		if err = writeJSON(conn, encoder, event); err != nil && wsOpened {
+		if err = writeJSON(conn, r, event); err != nil && wsOpened {
 			p.subscribers.RemoveClient(handlerId, clientID)
 			log.Println("Removed internal subscriber handlerId: ", handlerId, " clientID: ", clientID)
 			wsOpened = false
@@ -341,12 +282,19 @@ func (p *Http) wsHandler(wotServer *WotServer, handlerId string, w http.Response
 }
 
 // CREDIT TO Gorilla websocket library
-func writeJSON(wsc *websocket.Conn, codec encoder.Encoder, v interface{}) error {
+func writeJSON(wsc *websocket.Conn, r *http.Request, v interface{}) error {
 	w, err := wsc.NextWriter(websocket.TextMessage)
 	if err != nil {
 		return err
 	}
-	err1 := codec.Marshal(w, v)
+
+	encoder, err := encoder.Registry.Get("JSON")
+	if err != nil {
+		w.Write([]byte("Unsupported Encoding: JSON"))
+		return err
+	}
+
+	err1 := encoder.Marshal(w, v)
 	err2 := w.Close()
 	if err1 != nil {
 		return err1
@@ -362,13 +310,6 @@ var upgrader = websocket.Upgrader{
 
 func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		encoder, err := wotServer.GetEncoder(encoder.ENCODING_JSON)
-
-		if err != nil {
-			sendJsonERR(w, err)
-			return
-		}
-
 		subscriptionID, _ := sec.UUID4()
 		clients := async.NewFanOut()
 
@@ -376,7 +317,7 @@ func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) fun
 		wotServer.AddListener(eventName, p.eventHandler(subscriptionID, clients))
 
 		hrefs := links(websocketSubUrl(r, subscriptionID))
-		sendOK(w, encoder, hrefs)
+		sendOK(w, r, hrefs)
 	}
 }
 
@@ -471,33 +412,43 @@ func contextPath(ctxPath, element string) string {
 	return str.Concat(ctxPath, "/", element)
 }
 
-func sendOK(w http.ResponseWriter, codec encoder.Encoder, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+func readBody(r *http.Request, t interface{}) error {
+	encoder, err := encoder.Registry.Get("JSON")
 
-	codec.Marshal(w, payload)
-}
+	if err != nil {
+		return err
+	}
 
-func sendJsonOK(w http.ResponseWriter, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	err = encoder.Unmarshal(r.Body, t)
 
-	json.NewEncoder(w).Encode(payload)
-}
-
-func sendJsonERR(w http.ResponseWriter, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-
-	switch payload.(type) {
-	default:
-		json.NewEncoder(w).Encode(payload)
-	case error:
-		json.NewEncoder(w).Encode(payload.(error).Error())
+	if err != nil {
+		return err
+	} else {
+		return nil
 	}
 }
 
-func sendERR(w http.ResponseWriter, encoder encoder.Encoder, payload interface{}) {
+func sendOK(w http.ResponseWriter, r *http.Request, payload interface{}) {
+	encoder, err := encoder.Registry.Get("JSON")
+
+	if err != nil {
+		sendPlainERR(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	encoder.Marshal(w, payload)
+}
+
+func sendERR(w http.ResponseWriter, r *http.Request, payload interface{}) {
+	encoder, err := encoder.Registry.Get("JSON")
+
+	if err != nil {
+		sendPlainERR(w, err)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 
@@ -507,6 +458,13 @@ func sendERR(w http.ResponseWriter, encoder encoder.Encoder, payload interface{}
 	case error:
 		encoder.Marshal(w, payload.(error).Error())
 	}
+}
+
+func sendPlainERR(w http.ResponseWriter, err error) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+
+	w.Write([]byte(err.Error()))
 }
 
 type Links struct {
@@ -519,7 +477,6 @@ type Link struct {
 }
 
 type route struct {
-	name        string
 	method      string
 	pattern     string
 	handlerFunc http.HandlerFunc
@@ -529,6 +486,6 @@ func (p *Http) addRoute(route *route) {
 	p.router.
 		Methods(route.method).
 		Path(route.pattern).
-		Name(route.name).
+		Name(route.pattern).
 		Handler(route.handlerFunc)
 }
