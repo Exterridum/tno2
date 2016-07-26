@@ -1,16 +1,16 @@
 package async
 
-import "log"
-
 type Actor struct {
 	processor func(<-chan interface{})
 	io        chan interface{}
+	onPanic   func(interface{})
 }
 
-func Spawn(processor func(<-chan interface{})) *Actor {
+func Spawn(processor func(<-chan interface{}), panicHandler func(interface{})) *Actor {
 	actor := &Actor{
 		processor: processor,
 		io:        make(chan interface{}),
+		onPanic:   panicHandler,
 	}
 
 	go actor.read()
@@ -25,7 +25,10 @@ func (a *Actor) Channel() chan<- interface{} {
 func (a *Actor) read() {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Printf("Actor panick -> %v", err)
+			if a.onPanic != nil {
+				a.onPanic(err)
+			}
+
 			a.read()
 		}
 	}()

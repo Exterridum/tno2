@@ -3,8 +3,6 @@ package main
 import (
 	"log"
 	"time"
-
-	"github.com/conas/tno2/util/async"
 )
 
 func processor(in <-chan interface{}) {
@@ -24,11 +22,25 @@ func processor(in <-chan interface{}) {
 }
 
 func main() {
-	a1 := async.Spawn(processor).Channel()
+	go func() {
+		for {
+		}
+	}()
+
+	c1 := make(chan interface{})
+
+	c1 <- 1
+
+	log.Println("writen")
 
 	for {
-		a1 <- ("msg1")
-		a1 <- ("msg2")
-		a1 <- ("fail")
 	}
+
+	// a1 := async.Spawn(processor).Channel()
+
+	// for {
+	// 	a1 <- ("msg1")
+	// 	a1 <- ("msg2")
+	// 	a1 <- ("fail")
+	// }
 }
