@@ -20,10 +20,6 @@ type WotServer struct {
 	eventsCB  map[string][]*EventListener
 }
 
-type Device interface {
-	Init(initParams map[string]interface{}, s *WotServer)
-}
-
 type ActionHandler func(interface{}, async.StatusHandler)
 
 type EventListener struct {
@@ -61,10 +57,6 @@ func CreateFromDescription(td *model.ThingDescription) *WotServer {
 		actionCB:  make(map[string]ActionHandler),
 		eventsCB:  make(map[string][]*EventListener),
 	}
-}
-
-func (s *WotServer) Connect(d Device, initParams map[string]interface{}) {
-	d.Init(initParams, s)
 }
 
 //FIXME: Create model metadata with map

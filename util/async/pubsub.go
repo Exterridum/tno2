@@ -2,7 +2,7 @@ package async
 
 import "sync"
 
-//TODO make performance and memmory tests to decide between go routines and mutexes
+//TODO: make performance and memmory tests to decide between go channels and mutexes
 
 type FanOut struct {
 	out   map[int]chan<- interface{}
@@ -38,6 +38,7 @@ func (fo *FanOut) RemoveAllSubscribes() {
 	fo.mutex.Lock()
 	defer fo.mutex.Unlock()
 
+	//FIXME: Close all subscribers
 	fo.out = make(map[int]chan<- interface{})
 }
 
@@ -46,6 +47,7 @@ func (fo *FanOut) Publish(event interface{}) {
 		fo.mutex.RLock()
 		defer fo.mutex.RUnlock()
 
+		//FIXME: Naive implementation
 		for _, out := range fo.out {
 			out <- event
 		}

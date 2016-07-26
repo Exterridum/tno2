@@ -3,42 +3,12 @@ package main
 import (
 	"log"
 	"time"
+
+	"github.com/conas/tno2/util/async"
 )
 
-type Actor struct {
-	processor func(<-chan interface{})
-	io        chan interface{}
-	onPanic   func(Actor, interface{})
-}
-
-func Spawn(processor func(<-chan interface{})) chan<- interface{} {
-	actor := Actor{
-		processor: processor,
-		io:        make(chan interface{}),
-		onPanic:   restart,
-	}
-
-	go actor.read()
-
-	return actor.io
-}
-
-func (a Actor) read() {
-	defer a.panicHandler()
-	a.processor(a.io)
-}
-
-func restart(a Actor, message interface{}) {
-	a.read()
-}
-
-func (a Actor) panicHandler() {
-	if err := recover(); err != nil {
-		a.onPanic(a, err)
-	}
-}
-
 func processor(in <-chan interface{}) {
+	log.Printf("Entering processor")
 	for {
 		mail := <-in
 		log.Printf("Agent: message received: %v", mail)
@@ -54,12 +24,11 @@ func processor(in <-chan interface{}) {
 }
 
 func main() {
-	a1 := Spawn(processor)
+	a1 := async.Spawn(processor).Channel()
 
 	for {
 		a1 <- ("msg1")
 		a1 <- ("msg2")
 		a1 <- ("fail")
-		log.Printf("Loop restart")
 	}
 }
