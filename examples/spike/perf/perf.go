@@ -8,6 +8,7 @@ import (
 
 func main() {
 	chanTest()
+	bufferedChanTest()
 	goRoutineTest()
 	callbackTest()
 	callbackMutexTest()
@@ -17,7 +18,7 @@ func main() {
 var sampleSize = 10000000
 
 func chanTest() {
-	c := make(chan int, 10)
+	c := make(chan int)
 
 	go func() {
 		for {
@@ -28,6 +29,23 @@ func chanTest() {
 	time.Sleep(time.Second * 1)
 
 	defer timeTrack(time.Now(), "channels")
+	for i := 0; i < sampleSize; i++ {
+		c <- i
+	}
+}
+
+func bufferedChanTest() {
+	c := make(chan int, 10)
+
+	go func() {
+		for {
+			<-c
+		}
+	}()
+
+	time.Sleep(time.Second * 1)
+
+	defer timeTrack(time.Now(), "buffered channels")
 	for i := 0; i < sampleSize; i++ {
 		c <- i
 	}
