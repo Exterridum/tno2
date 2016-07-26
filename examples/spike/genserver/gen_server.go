@@ -24,13 +24,14 @@ func main() {
 
 	gs.Start()
 
-	log.Printf("Output -> %v", <-gs.Call(MSG_1, 1))
-	log.Printf("Output -> %v", <-gs.Call(MSG_2, 2))
-	log.Printf("Output -> %v", <-gs.Call(MSG_2, 3))
-	log.Printf("Output -> %v", <-gs.Call(MSG_2, 4))
-	log.Printf("Output -> %v", <-gs.Call(MSG_2, 5))
-	log.Printf("Output -> %v", <-gs.Call(MSG_2, 6))
-	log.Printf("Output -> %v", <-gs.Call(MSG_1, 7))
+	defer timeTrack(time.Now(), "channels")
 
-	time.Sleep(time.Hour * 12)
+	for i := 0; i < 1000000; i++ {
+		<-gs.Call(MSG_1, i)
+	}
+}
+
+func timeTrack(start time.Time, name string) {
+	elapsed := time.Since(start)
+	log.Printf("%s took %s", name, elapsed)
 }
