@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"time"
 
 	"github.com/conas/tno2/util/async"
 )
@@ -24,14 +23,12 @@ func main() {
 
 	gs.Start()
 
-	defer timeTrack(time.Now(), "channels")
+	log.Printf("Output -> %v", <-gs.Call(MSG_1, 1))
+	log.Printf("Output -> %v", <-gs.Call(MSG_2, 2))
+	log.Printf("Output -> %v", <-gs.Call(MSG_2, 3))
+	log.Printf("Output -> %v", <-gs.Call(MSG_2, 4))
+	log.Printf("Output -> %v", <-gs.Call(MSG_2, 5))
+	log.Printf("Output -> %v", <-gs.Call(MSG_2, 6))
+	log.Printf("Output -> %v", <-gs.Call(MSG_1, 7))
 
-	for i := 0; i < 1000000; i++ {
-		<-gs.Call(MSG_1, i)
-	}
-}
-
-func timeTrack(start time.Time, name string) {
-	elapsed := time.Since(start)
-	log.Printf("%s took %s", name, elapsed)
 }
