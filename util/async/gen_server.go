@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// Performance testing shows that channels are very slow, need to reimplement using another pattern
 type GenServer struct {
 	handlers map[MessageType]func(interface{}) interface{}
 	in       chan<- interface{}

@@ -17,7 +17,7 @@ func main() {
 var sampleSize = 10000000
 
 func chanTest() {
-	c := make(chan int)
+	c := make(chan int, 10)
 
 	go func() {
 		for {
