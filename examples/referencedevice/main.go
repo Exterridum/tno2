@@ -74,10 +74,9 @@ func addActionsHandlers(s *server.WotServer) {
 }
 
 func longRunningAction(name string) server.ActionHandler {
-	return func(arg interface{}, status async.StatusHandler) interface{} {
-		log.Printf("3. longRunningAction %+v", arg)
+	return func(arg interface{}, ph async.ProgressHandler) interface{} {
 		for i := 0; i < 10; i++ {
-			status.Update(&ActionStatus{Status: i})
+			ph.Update(&ActionStatus{Status: i})
 			time.Sleep(time.Second * 2)
 		}
 

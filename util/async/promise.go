@@ -38,12 +38,12 @@ func (prev *Promise) Get() interface{} {
 
 // ----- Promise With Status Update
 
-type StatusPromise struct {
-	pch           chan interface{}
-	statusHandler StatusHandler
+type ProgressPromise struct {
+	pch chan interface{}
+	ph  ProgressHandler
 }
 
-type StatusHandler interface {
+type ProgressHandler interface {
 	Schedule(interface{})
 	Update(interface{})
 	Done(interface{})
@@ -52,33 +52,33 @@ type StatusHandler interface {
 
 // type StatusHandler func(TaskStatus, interface{})
 
-func RunWithStatus(task func(StatusHandler) interface{}, statusHandler StatusHandler) *StatusPromise {
-	p := NewStatusPromise(statusHandler)
+func RunProgress(task func(ProgressHandler) interface{}, ph ProgressHandler) *ProgressPromise {
+	p := NewProgressPromise(ph)
 
 	go func() {
-		p.pch <- task(p.statusHandler)
+		p.pch <- task(p.ph)
 	}()
 
 	return p
 }
 
-func NewStatusPromise(statusHandler StatusHandler) *StatusPromise {
-	return &StatusPromise{
-		pch:           make(chan interface{}),
-		statusHandler: statusHandler,
+func NewProgressPromise(ph ProgressHandler) *ProgressPromise {
+	return &ProgressPromise{
+		pch: make(chan interface{}),
+		ph:  ph,
 	}
 }
 
-func (prev *StatusPromise) Then(callback func(interface{}, StatusHandler) interface{}) *StatusPromise {
-	next := NewStatusPromise(prev.statusHandler)
+func (prev *ProgressPromise) Then(callback func(interface{}, ProgressHandler) interface{}) *ProgressPromise {
+	next := NewProgressPromise(prev.ph)
 
 	go func() {
-		next.pch <- callback(<-prev.pch, prev.statusHandler)
+		next.pch <- callback(<-prev.pch, prev.ph)
 	}()
 
 	return next
 }
 
-func (prev *StatusPromise) Get() interface{} {
+func (prev *ProgressPromise) Get() interface{} {
 	return <-prev.pch
 }

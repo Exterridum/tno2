@@ -235,21 +235,11 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 		clients := async.NewFanOut()
 		p.subscribers.CreateSubscription(actionID, clients)
 		ph := NewProgressHandler(slot, clients)
-		value := wotServer.InvokeAction(actionName, wo, ph)
-		data := value.Get()
+		ph.Schedule(wo)
+		wotServer.InvokeAction(actionName, wo, ph)
 
-		switch data.(type) {
-		case Status:
-			if data.(Status) != WOT_OK {
-				sendERR(w, r, data)
-
-			}
-		case error:
-			sendERR(w, r, data)
-		default:
-			hrefs := links(websocketSubUrl(r, actionID), httpSubUrl(r, actionID))
-			sendOK(w, r, hrefs)
-		}
+		hrefs := links(websocketSubUrl(r, actionID), httpSubUrl(r, actionID))
+		sendOK(w, r, hrefs)
 	}
 }
 
@@ -271,11 +261,12 @@ func (p *Http) actionWSTaskHandler(wotServer *WotServer) func(w http.ResponseWri
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		taskid := vars["taskid"]
-		p.wsHandler(wotServer, taskid, w, r)
+		slot, _ := p.actionResults.GetSlot(taskid)
+		p.wsHandler(wotServer, taskid, slot.Load(), w, r)
 	}
 }
 
-func (p *Http) wsHandler(wotServer *WotServer, handlerId string, w http.ResponseWriter, r *http.Request) {
+func (p *Http) wsHandler(wotServer *WotServer, handlerId string, welcomeValue interface{}, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
@@ -288,8 +279,14 @@ func (p *Http) wsHandler(wotServer *WotServer, handlerId string, w http.Response
 
 	log.Println("Created internal subscriber handlerId: ", handlerId, " clientID: ", clientID)
 
+	//Do not let client wait for the first value a provide with data on connection opened
+	if welcomeValue != nil {
+		writeJSON(conn, r, welcomeValue)
+	}
+
 	wsOpened := true
 	for event := range client {
+		//FIXME: Seems like ws close is not reported whe using custom JSON writer
 		if err = writeJSON(conn, r, event); err != nil && wsOpened {
 			p.subscribers.RemoveClient(handlerId, clientID)
 			log.Println("Removed internal subscriber handlerId: ", handlerId, " clientID: ", clientID)
@@ -342,7 +339,7 @@ func (p *Http) eventWSClientHandler(wotServer *WotServer) func(w http.ResponseWr
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		subscriptionID := vars["subscriptionID"]
-		p.wsHandler(wotServer, subscriptionID, w, r)
+		p.wsHandler(wotServer, subscriptionID, nil, w, r)
 	}
 }
 

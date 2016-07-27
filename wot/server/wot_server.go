@@ -86,11 +86,11 @@ func (s *WotServer) OnInvokeAction(actionName string, actionHandler ActionHandle
 	return s
 }
 
-func (s *WotServer) InvokeAction(actionName string, arg interface{}, statusHandler async.StatusHandler) *async.Value {
+func (s *WotServer) InvokeAction(actionName string, arg interface{}, ph async.ProgressHandler) *async.Value {
 	return s.gs.Call(ACTION_HANDLER_CALL, &ActionHandlerCallMsg{
 		name: actionName,
 		arg:  arg,
-		sh:   statusHandler,
+		ph:   ph,
 	})
 }
 

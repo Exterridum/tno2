@@ -55,6 +55,7 @@ func (gs *GenServer) processor(in <-chan interface{}) {
 		mail := <-in
 		msg := mail.(*Message)
 		gs.res = msg.res
-		gs.res.set(gs.handlers[msg.msgType](msg.data))
+		r := gs.handlers[msg.msgType](msg.data)
+		gs.res.set(r)
 	}
 }

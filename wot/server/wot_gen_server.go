@@ -33,7 +33,7 @@ type ActionHandlerAddMsg struct {
 type ActionHandlerCallMsg struct {
 	name string
 	arg  interface{}
-	sh   async.StatusHandler
+	ph   async.ProgressHandler
 }
 
 type GetPropertyMsg struct {
@@ -65,7 +65,7 @@ type EventListenerAddMsg struct {
 	listener *EventListener
 }
 
-type ActionHandler func(interface{}, async.StatusHandler) interface{}
+type ActionHandler func(interface{}, async.ProgressHandler) interface{}
 
 type EventListener struct {
 	ID string
@@ -103,9 +103,9 @@ func setup() *async.GenServer {
 
 			log.Printf("Action start %s", msg.name)
 
-			msg.sh.Schedule(arg)
-			result := handler(msg.arg, msg.sh)
-			msg.sh.Done(result)
+			//Progress handler scheduled status is set at transport level.
+			result := handler(msg.arg, msg.ph)
+			msg.ph.Done(result)
 
 			return WOT_OK
 		}).

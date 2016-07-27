@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"github.com/conas/tno2/util/async"
 )
@@ -29,4 +30,6 @@ func main() {
 	log.Printf("Output -> %v", gs.Call(MSG_2, 5).Get())
 	log.Printf("Output -> %v", gs.Call(MSG_2, 6).Get())
 	log.Printf("Output -> %v", gs.Call(MSG_1, 7).Get())
+
+	time.Sleep(time.Second * 10)
 }
