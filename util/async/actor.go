@@ -2,36 +2,50 @@ package async
 
 type Actor struct {
 	processor func(<-chan interface{})
-	io        chan interface{}
+	in        chan interface{}
 	onPanic   func(interface{})
+	run       bool
 }
 
-func Spawn(processor func(<-chan interface{}), panicHandler func(interface{})) *Actor {
+func Spawn(
+	mailboxSize int,
+	processor func(<-chan interface{}),
+	panicHandler func(interface{})) *Actor {
+
 	actor := &Actor{
 		processor: processor,
-		io:        make(chan interface{}),
+		in:        make(chan interface{}, mailboxSize),
 		onPanic:   panicHandler,
+		run:       true,
 	}
 
-	go actor.read()
+	actor.start()
 
 	return actor
 }
 
 func (a *Actor) Channel() chan<- interface{} {
-	return a.io
+	return a.in
 }
 
-func (a *Actor) read() {
-	defer func() {
-		if err := recover(); err != nil {
-			if a.onPanic != nil {
-				a.onPanic(err)
-			}
-
+func (a *Actor) start() {
+	go func() {
+		for a.run {
 			a.read()
 		}
 	}()
+}
 
-	a.processor(a.io)
+func (a *Actor) read() {
+	defer a.recovery()
+	a.processor(a.in)
+	a.run = false
+}
+
+func (a *Actor) recovery() {
+	if err := recover(); err != nil {
+		if a.onPanic != nil {
+			a.onPanic(err)
+		}
+	}
 }

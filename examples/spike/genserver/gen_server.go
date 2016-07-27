@@ -13,22 +13,20 @@ const (
 
 func main() {
 	gs := async.NewGenServer().
-		Handle(MSG_1, func(arg interface{}) interface{} {
-			v := arg.(int)
-			return v + 1
+		HandleCall(MSG_1, func(arg interface{}) interface{} {
+			return arg
 		}).
-		Handle(MSG_2, func(arg interface{}) interface{} {
+		HandleCall(MSG_2, func(arg interface{}) interface{} {
 			panic("MSG_2 -> panic")
 		})
 
 	gs.Start()
 
-	log.Printf("Output -> %v", <-gs.Call(MSG_1, 1))
-	log.Printf("Output -> %v", <-gs.Call(MSG_2, 2))
-	log.Printf("Output -> %v", <-gs.Call(MSG_2, 3))
-	log.Printf("Output -> %v", <-gs.Call(MSG_2, 4))
-	log.Printf("Output -> %v", <-gs.Call(MSG_2, 5))
-	log.Printf("Output -> %v", <-gs.Call(MSG_2, 6))
-	log.Printf("Output -> %v", <-gs.Call(MSG_1, 7))
-
+	log.Printf("Output -> %v", gs.Call(MSG_1, 1).Get())
+	log.Printf("Output -> %v", gs.Call(MSG_2, 2).Get())
+	log.Printf("Output -> %v", gs.Call(MSG_2, 3).Get())
+	log.Printf("Output -> %v", gs.Call(MSG_2, 4).Get())
+	log.Printf("Output -> %v", gs.Call(MSG_2, 5).Get())
+	log.Printf("Output -> %v", gs.Call(MSG_2, 6).Get())
+	log.Printf("Output -> %v", gs.Call(MSG_1, 7).Get())
 }

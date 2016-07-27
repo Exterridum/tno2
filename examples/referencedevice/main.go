@@ -17,7 +17,7 @@ func main() {
 	http := server.NewHttp(8080)
 	http.Bind("/reference-model", wotServer)
 
-	startEventGenerator(wotServer)
+	// startEventGenerator(wotServer)
 
 	http.Start()
 }
@@ -74,12 +74,13 @@ func addActionsHandlers(s *server.WotServer) {
 }
 
 func longRunningAction(name string) server.ActionHandler {
-	return func(arg interface{}, status async.StatusHandler) {
+	return func(arg interface{}, status async.StatusHandler) interface{} {
+		log.Printf("3. longRunningAction %+v", arg)
 		for i := 0; i < 10; i++ {
 			status.Update(&ActionStatus{Status: i})
 			time.Sleep(time.Second * 2)
 		}
 
-		status.Done(&ActionStatus{Status: 10})
+		return &ActionStatus{Status: 10}
 	}
 }

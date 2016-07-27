@@ -180,13 +180,19 @@ func (w *WotObject) GetValue() interface{} {
 
 func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		promise, rc := p.wotServers[ctxPath].GetProperty(prop.Name)
+		value := p.wotServers[ctxPath].GetProperty(prop.Name)
 
-		if rc == WOT_OK {
-			value := promise.Get()
-			sendOK(w, r, value)
-		} else {
-			sendERR(w, r, rc)
+		data := value.Get()
+
+		switch data.(type) {
+		case Status:
+			if data.(Status) != WOT_OK {
+				sendERR(w, r, data)
+			}
+		case error:
+			sendERR(w, r, data)
+		default:
+			sendOK(w, r, data)
 		}
 	}
 }
@@ -201,12 +207,16 @@ func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w h
 			return
 		}
 
-		promise, rc := p.wotServers[ctxPath].SetProperty(prop.Name, wo.GetValue())
+		value := p.wotServers[ctxPath].SetProperty(prop.Name, wo.GetValue())
+		data := value.Get()
 
-		if rc == WOT_OK {
-			promise.Get()
-		} else {
-			sendERR(w, r, rc)
+		switch data.(type) {
+		case Status:
+			if data.(Status) != WOT_OK {
+				sendERR(w, r, data)
+			}
+		case error:
+			sendERR(w, r, data)
 		}
 	}
 }
@@ -225,13 +235,20 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 		clients := async.NewFanOut()
 		p.subscribers.CreateSubscription(actionID, clients)
 		ph := NewProgressHandler(slot, clients)
-		_, rc := wotServer.InvokeAction(actionName, wo, ph)
+		value := wotServer.InvokeAction(actionName, wo, ph)
+		data := value.Get()
 
-		if rc == WOT_OK {
+		switch data.(type) {
+		case Status:
+			if data.(Status) != WOT_OK {
+				sendERR(w, r, data)
+
+			}
+		case error:
+			sendERR(w, r, data)
+		default:
 			hrefs := links(websocketSubUrl(r, actionID), httpSubUrl(r, actionID))
 			sendOK(w, r, hrefs)
-		} else {
-			sendERR(w, r, rc)
 		}
 	}
 }
@@ -461,7 +478,7 @@ func sendERR(w http.ResponseWriter, r *http.Request, payload interface{}) {
 }
 
 func sendPlainERR(w http.ResponseWriter, err error) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusBadRequest)
 
 	w.Write([]byte(err.Error()))
