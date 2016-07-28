@@ -2,10 +2,11 @@ package server
 
 import (
 	"log"
-	"time"
 
 	"github.com/conas/tno2/util/async"
 )
+
+type Status int
 
 const (
 	WOT_OK Status = iota
@@ -21,8 +22,6 @@ const (
 	GET_PROPERTY_HANDLER
 	SET_PROPERTY
 	SET_PROPERTY_HANDLER
-	EVENT_LISTENER_ADD
-	EVENT_EMIT
 )
 
 type ActionHandlerAddMsg struct {
@@ -55,36 +54,13 @@ type SetPropertyHandlerMsg struct {
 	fn   func(interface{})
 }
 
-type EventEmitMsg struct {
-	name string
-	data interface{}
-}
-
-type EventListenerAddMsg struct {
-	name     string
-	listener *EventListener
-}
-
 type ActionHandler func(interface{}, async.ProgressHandler) interface{}
-
-type EventListener struct {
-	ID string
-	CB func(interface{})
-}
-
-type Event struct {
-	Timestamp time.Time   `json:"timestamp,omitempty"`
-	Event     interface{} `json:"event,omitempty"`
-}
-
-type Status int
 
 // WotGentServer provides process isolation for device represented by one goroutine
 func setup() *async.GenServer {
 	propGetCB := make(map[string]func() interface{})
 	propSetCB := make(map[string]func(interface{}))
 	actionCB := make(map[string]ActionHandler)
-	eventsCB := make(map[string][]*EventListener)
 
 	gs := async.NewGenServer().
 		HandleCall(ACTION_HANDLER_ADD, func(arg interface{}) interface{} {
@@ -142,41 +118,9 @@ func setup() *async.GenServer {
 			propSetCB[msg.name] = msg.fn
 
 			return WOT_OK
-		}).
-		HandleCall(EVENT_EMIT, func(arg interface{}) interface{} {
-			msg := arg.(*EventEmitMsg)
-
-			listeners, ok := eventsCB[msg.name]
-
-			if !ok {
-				return WOT_UNKNOWN_EVENT
-			}
-
-			// TODO: Check panic safety
-			async.Run(func() interface{} {
-				for _, eventListener := range listeners {
-					eventListener.CB(newEvent(msg.data))
-				}
-				return nil
-			})
-
-			return WOT_OK
-		}).
-		HandleCall(EVENT_LISTENER_ADD, func(arg interface{}) interface{} {
-			msg := arg.(*EventListenerAddMsg)
-			eventsCB[msg.name] = append(eventsCB[msg.name], msg.listener)
-
-			return WOT_OK
 		})
 
 	gs.Start()
 
 	return gs
-}
-
-func newEvent(data interface{}) *Event {
-	return &Event{
-		Event:     data,
-		Timestamp: time.Now(),
-	}
 }

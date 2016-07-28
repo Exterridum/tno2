@@ -17,7 +17,7 @@ func main() {
 	http := server.NewHttp(8080)
 	http.Bind("/reference-model", wotServer)
 
-	// startEventGenerator(wotServer)
+	startEventGenerator(wotServer)
 
 	http.Start()
 }
@@ -25,7 +25,7 @@ func main() {
 func startEventGenerator(wotServet *server.WotServer) {
 	go func() {
 		for {
-			wotServet.EmitEvent("critical-condition-event", "some payload")
+			wotServet.EmitEvent("critical-condition-event", "Event Data")
 			time.Sleep(time.Second * 5)
 		}
 	}()

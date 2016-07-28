@@ -31,7 +31,7 @@ var hostname = "http://localhost:8080"
 
 func NewHttp(port int) *Http {
 	// r.PathPrefix("/model").HandlerFunc(Model)
-	return &Http{
+	http := &Http{
 		port:          port,
 		router:        mux.NewRouter().StrictSlash(true),
 		hrefs:         make([]string, 0),
@@ -39,6 +39,10 @@ func NewHttp(port int) *Http {
 		subscribers:   NewSubscribers(),
 		actionResults: NewActionResults(),
 	}
+
+	http.registerRoot()
+
+	return http
 }
 
 func (p *Http) Bind(ctxPath string, s *WotServer) {
@@ -55,19 +59,8 @@ func updateThingDescription(ctxPath string, td *model.ThingDescription) {
 }
 
 func (p *Http) Start() {
-	p.registerRoot()
 	port := str.Concat(":", strconv.Itoa(p.port))
 	log.Fatal(http.ListenAndServe(port, p.router))
-}
-
-// ----- ThingDescription parser methods
-
-func (p *Http) createRoutes(ctxPath string, td *model.ThingDescription) {
-	p.registerDeviceRoot(ctxPath, td)
-	p.registerDeviceDescriptor(ctxPath, td)
-	p.registerProperties(ctxPath, td)
-	p.registerActions(ctxPath, td)
-	p.registerEvents(ctxPath, td)
 }
 
 func (p *Http) registerRoot() {
@@ -78,7 +71,7 @@ func (p *Http) registerRoot() {
 			ls := links()
 
 			for path := range p.wotServers {
-				ls.Links = append(ls.Links, httpSubUrl(r, path))
+				ls.Links = append(ls.Links, httpSubURL(r, path))
 			}
 
 			sendOK(w, r, ls)
@@ -86,12 +79,22 @@ func (p *Http) registerRoot() {
 	})
 }
 
-func (p *Http) registerDeviceRoot(ctxPath string, td *model.ThingDescription) {
+// ----- ThingDescription parser methods
+
+func (p *Http) createRoutes(ctxPath string, td *model.ThingDescription) {
+	p.registerDeviceRoot(ctxPath)
+	p.registerDeviceDescriptor(ctxPath, td)
+	p.registerProperties(ctxPath, td.Properties)
+	p.registerActions(ctxPath, td.Actions)
+	p.registerEvents(ctxPath, td.Events)
+}
+
+func (p *Http) registerDeviceRoot(ctxPath string) {
 	p.addRoute(&route{
 		method:  "GET",
 		pattern: contextPath(ctxPath, ""),
 		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
-			hrefs := links(httpSubUrl(r, "description"))
+			hrefs := links(httpSubURL(r, "description"))
 
 			sendOK(w, r, hrefs)
 		},
@@ -108,8 +111,8 @@ func (p *Http) registerDeviceDescriptor(ctxPath string, td *model.ThingDescripti
 	})
 }
 
-func (p *Http) registerProperties(ctxPath string, td *model.ThingDescription) {
-	for _, prop := range td.Properties {
+func (p *Http) registerProperties(ctxPath string, properties []model.Property) {
+	for _, prop := range properties {
 		p.addRoute(&route{
 			method:      "GET",
 			pattern:     contextPath(ctxPath, prop.Hrefs[0]),
@@ -128,8 +131,8 @@ func (p *Http) registerProperties(ctxPath string, td *model.ThingDescription) {
 	}
 }
 
-func (p *Http) registerActions(ctxPath string, td *model.ThingDescription) {
-	for _, action := range td.Actions {
+func (p *Http) registerActions(ctxPath string, actions []model.Action) {
+	for _, action := range actions {
 		p.addRoute(&route{
 			method:      "POST",
 			pattern:     contextPath(ctxPath, action.Hrefs[0]),
@@ -152,8 +155,8 @@ func (p *Http) registerActions(ctxPath string, td *model.ThingDescription) {
 	}
 }
 
-func (p *Http) registerEvents(ctxPath string, td *model.ThingDescription) {
-	for _, event := range td.Events {
+func (p *Http) registerEvents(ctxPath string, events []model.Event) {
+	for _, event := range events {
 		p.addRoute(&route{
 			method:      "POST",
 			pattern:     contextPath(ctxPath, event.Hrefs[0]),
@@ -234,11 +237,11 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 		actionID, slot := p.actionResults.CreateSlot()
 		clients := async.NewFanOut()
 		p.subscribers.CreateSubscription(actionID, clients)
-		ph := NewProgressHandler(slot, clients)
+		ph := NewWotProgressHandler(actionName, slot, clients)
 		ph.Schedule(wo)
 		wotServer.InvokeAction(actionName, wo, ph)
 
-		hrefs := links(websocketSubUrl(r, actionID), httpSubUrl(r, actionID))
+		hrefs := links(websocketSubURL(r, actionID), httpSubURL(r, actionID))
 		sendOK(w, r, hrefs)
 	}
 }
@@ -274,20 +277,22 @@ func (p *Http) wsHandler(wotServer *WotServer, handlerId string, welcomeValue in
 		return
 	}
 
-	client := make(chan interface{})
-	clientID := p.subscribers.AddClient(handlerId, client)
+	clientCh := make(chan interface{})
+	clientID := p.subscribers.AddClient(handlerId, clientCh)
 
 	log.Println("Created internal subscriber handlerId: ", handlerId, " clientID: ", clientID)
 
 	//Do not let client wait for the first value a provide with data on connection opened
 	if welcomeValue != nil {
-		writeJSON(conn, r, welcomeValue)
+		writeData(conn, r, welcomeValue)
 	}
 
 	wsOpened := true
-	for event := range client {
-		//FIXME: Seems like ws close is not reported whe using custom JSON writer
-		if err = writeJSON(conn, r, event); err != nil && wsOpened {
+	for event := range clientCh {
+		//FIXME: We need to handle 2 situations
+		// 1. websocket closed
+		// 2. no more data on channel
+		if err = writeData(conn, r, event); err != nil && wsOpened {
 			p.subscribers.RemoveClient(handlerId, clientID)
 			log.Println("Removed internal subscriber handlerId: ", handlerId, " clientID: ", clientID)
 			wsOpened = false
@@ -296,7 +301,7 @@ func (p *Http) wsHandler(wotServer *WotServer, handlerId string, welcomeValue in
 }
 
 // CREDIT TO Gorilla websocket library
-func writeJSON(wsc *websocket.Conn, r *http.Request, v interface{}) error {
+func writeData(wsc *websocket.Conn, r *http.Request, v interface{}) error {
 	w, err := wsc.NextWriter(websocket.TextMessage)
 	if err != nil {
 		return err
@@ -330,7 +335,7 @@ func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) fun
 		p.subscribers.CreateSubscription(subscriptionID, clients)
 		wotServer.AddListener(eventName, p.eventHandler(subscriptionID, clients))
 
-		hrefs := links(websocketSubUrl(r, subscriptionID))
+		hrefs := links(websocketSubURL(r, subscriptionID))
 		sendOK(w, r, hrefs)
 	}
 }
@@ -366,7 +371,7 @@ func links(links ...Link) *Links {
 	return &ls
 }
 
-func httpSubUrl(r *http.Request, subresource string) Link {
+func httpSubURL(r *http.Request, subresource string) Link {
 	uri := removeTTslash(r.URL.RequestURI())
 
 	if len(uri) == 0 {
@@ -383,7 +388,7 @@ func httpSubUrl(r *http.Request, subresource string) Link {
 	}
 }
 
-func websocketSubUrl(r *http.Request, subresource string) Link {
+func websocketSubURL(r *http.Request, subresource string) Link {
 	uri := removeTTslash(r.URL.RequestURI())
 
 	if len(uri) == 0 {

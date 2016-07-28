@@ -3,6 +3,7 @@ package server
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/util/sec"
@@ -11,63 +12,76 @@ import (
 type TaskStatusCode int
 
 const (
-	TASK_SCHEDULED TaskStatusCode = iota
-	TASK_RUNNING
-	TASK_DONE
-	TASK_FAILED
+	TASK_FAILED    TaskStatusCode = -1
+	TASK_SCHEDULED TaskStatusCode = 0
+	TASK_RUNNING   TaskStatusCode = 1
+	TASK_DONE      TaskStatusCode = 2
 )
 
 type TaskStatus struct {
-	Code TaskStatusCode `json:"code"`
-	Data interface{}    `json:"data"`
+	Name      string         `json:"name,omitempty"`
+	Status    TaskStatusCode `json:"status"`
+	Timestamp time.Time      `json:"timestamp,omitempty"`
+	Data      interface{}    `json:"data"`
 }
 
-type ProgressHandler struct {
+// WotProgressHandler implements async.ProgressHandler
+type WotProgressHandler struct {
+	name        string
 	state       *atomic.Value
 	subscribers *async.FanOut
 }
 
-func NewProgressHandler(state *atomic.Value, subscribers *async.FanOut) *ProgressHandler {
-	return &ProgressHandler{
+func NewWotProgressHandler(name string, state *atomic.Value, subscribers *async.FanOut) *WotProgressHandler {
+	return &WotProgressHandler{
+		name:        name,
 		state:       state,
 		subscribers: subscribers,
 	}
 }
 
-func (ph *ProgressHandler) Schedule(data interface{}) {
+func (ph *WotProgressHandler) Schedule(data interface{}) {
 	status := &TaskStatus{
-		Code: TASK_SCHEDULED,
-		Data: data,
+		Name:      ph.name,
+		Status:    TASK_SCHEDULED,
+		Timestamp: time.Now(),
+		Data:      data,
 	}
 
 	ph.state.Store(status)
 	ph.subscribers.Publish(status)
 }
 
-func (ph *ProgressHandler) Update(data interface{}) {
+func (ph *WotProgressHandler) Update(data interface{}) {
 	status := &TaskStatus{
-		Code: TASK_RUNNING,
-		Data: data,
+		Name:      ph.name,
+		Status:    TASK_RUNNING,
+		Timestamp: time.Now(),
+		Data:      data,
 	}
 
 	ph.state.Store(status)
 	ph.subscribers.Publish(status)
 }
 
-func (ph *ProgressHandler) Done(data interface{}) {
+func (ph *WotProgressHandler) Done(data interface{}) {
 	status := &TaskStatus{
-		Code: TASK_DONE,
-		Data: data,
+		Name:      ph.name,
+		Status:    TASK_DONE,
+		Timestamp: time.Now(),
+		Data:      data,
 	}
 
 	ph.state.Store(status)
 	ph.subscribers.Publish(status)
 }
 
-func (ph *ProgressHandler) Fail(data interface{}) {
+func (ph *WotProgressHandler) Fail(data interface{}) {
 	status := &TaskStatus{
-		Code: TASK_FAILED,
-		Data: data,
+		Name:      ph.name,
+		Status:    TASK_FAILED,
+		Timestamp: time.Now(),
+		Data:      data,
 	}
 
 	ph.state.Store(status)

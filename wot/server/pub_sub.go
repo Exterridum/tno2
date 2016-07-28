@@ -6,6 +6,11 @@ import (
 	"github.com/conas/tno2/util/async"
 )
 
+// Subscribers struct allows to share one subscription between multiple clients
+// Common scenario is when user creates subscription for event or fires action, link to subscription is returned
+// and then multiple clients can share this subscription link
+// Each entry in subscription map of Subscribers struct corresponds to one real subscription. Map entry
+// then contains all connected clients
 type Subscribers struct {
 	rwmut        *sync.RWMutex
 	subscription map[string]*async.FanOut

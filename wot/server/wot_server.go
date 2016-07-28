@@ -1,6 +1,9 @@
 package server
 
 import (
+	"sync"
+	"time"
+
 	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/wot/model"
 )
@@ -10,8 +13,74 @@ import (
 // https://github.com/w3c/wot/tree/master/proposals/restructured-scripting-api#exposedthing
 
 type WotServer struct {
-	td *model.ThingDescription
-	gs *async.GenServer
+	td     *model.ThingDescription
+	gs     *async.GenServer
+	events *eventsMap
+}
+
+type EventListener struct {
+	ID string
+	CB func(interface{})
+}
+
+type Event struct {
+	Name      string      `json:"name,omitempty"`
+	Timestamp time.Time   `json:"timestamp,omitempty"`
+	Data      interface{} `json:"data,omitempty"`
+}
+
+func newEvent(eventName string, data interface{}) *Event {
+	return &Event{
+		Name:      eventName,
+		Timestamp: time.Now(),
+		Data:      data,
+	}
+}
+
+type eventsMap struct {
+	lock     *sync.RWMutex
+	eventsCB map[string][]*EventListener
+}
+
+func (em *eventsMap) addEvent(eventName string) Status {
+	em.lock.Lock()
+	defer em.lock.Unlock()
+
+	_, ok := em.eventsCB[eventName]
+
+	if !ok {
+		em.eventsCB[eventName] = make([]*EventListener, 0)
+	}
+
+	return WOT_OK
+}
+
+func (em *eventsMap) addListener(eventName string, listener *EventListener) Status {
+	em.lock.Lock()
+	defer em.lock.Unlock()
+
+	_, ok := em.eventsCB[eventName]
+
+	if !ok {
+		return WOT_UNKNOWN_EVENT
+	}
+
+	em.eventsCB[eventName] = append(em.eventsCB[eventName], listener)
+
+	return WOT_OK
+}
+
+func (em *eventsMap) listeners(eventName string) ([]*EventListener, Status) {
+	em.lock.RLock()
+	defer em.lock.RUnlock()
+
+	listeners, ok := em.eventsCB[eventName]
+
+	if !ok {
+		return nil, WOT_UNKNOWN_EVENT
+	}
+
+	return listeners, WOT_OK
 }
 
 func CreateThing(name string) *WotServer {
@@ -23,9 +92,19 @@ func CreateFromDescriptionUri(uri string) *WotServer {
 }
 
 func CreateFromDescription(td *model.ThingDescription) *WotServer {
+	events := &eventsMap{
+		lock:     &sync.RWMutex{},
+		eventsCB: make(map[string][]*EventListener),
+	}
+
+	for _, ev := range td.Events {
+		events.addEvent(ev.Name)
+	}
+
 	return &WotServer{
-		td: td,
-		gs: setup(),
+		td:     td,
+		gs:     setup(),
+		events: events,
 	}
 }
 
@@ -95,14 +174,13 @@ func (s *WotServer) InvokeAction(actionName string, arg interface{}, ph async.Pr
 }
 
 func (s *WotServer) AddEvent(eventName string, payloadType interface{}) *WotServer {
-	panic("Add event not implemented!")
+	s.events.addEvent(eventName)
+	return s
 }
 
 func (s *WotServer) AddListener(eventName string, listener *EventListener) *WotServer {
-	s.gs.Call(EVENT_LISTENER_ADD, &EventListenerAddMsg{
-		name:     eventName,
-		listener: listener,
-	})
+	//FIXME we should check for event rpesense
+	s.events.addListener(eventName, listener)
 	return s
 }
 
@@ -117,9 +195,21 @@ func (s *WotServer) RemoveAllListeners(eventName string) *WotServer {
 	return s
 }
 
-func (s *WotServer) EmitEvent(eventName string, payload interface{}) *async.Value {
-	return s.gs.Call(EVENT_EMIT, &EventEmitMsg{
-		name: eventName,
-		data: payload,
+func (s *WotServer) EmitEvent(eventName string, data interface{}) Status {
+	listeners, status := s.events.listeners(eventName)
+
+	if status != WOT_OK {
+		return status
+	}
+
+	// TODO: Check panic safety
+	async.Run(func() interface{} {
+		event := newEvent(eventName, data)
+		for _, eventListener := range listeners {
+			eventListener.CB(event)
+		}
+		return nil
 	})
+
+	return WOT_OK
 }

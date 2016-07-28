@@ -36,7 +36,7 @@ func (prev *Promise) Get() interface{} {
 	return <-prev.pch
 }
 
-// ----- Promise With Status Update
+// ----- Promise With Progress Update
 
 type ProgressPromise struct {
 	pch chan interface{}
