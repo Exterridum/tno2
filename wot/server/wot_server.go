@@ -1,9 +1,6 @@
 package server
 
 import (
-	"sync"
-	"time"
-
 	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/wot/model"
 )
@@ -13,74 +10,8 @@ import (
 // https://github.com/w3c/wot/tree/master/proposals/restructured-scripting-api#exposedthing
 
 type WotServer struct {
-	td     *model.ThingDescription
-	gs     *async.GenServer
-	events *eventsMap
-}
-
-type EventListener struct {
-	ID string
-	CB func(interface{})
-}
-
-type Event struct {
-	Name      string      `json:"name,omitempty"`
-	Timestamp time.Time   `json:"timestamp,omitempty"`
-	Data      interface{} `json:"data,omitempty"`
-}
-
-func newEvent(eventName string, data interface{}) *Event {
-	return &Event{
-		Name:      eventName,
-		Timestamp: time.Now(),
-		Data:      data,
-	}
-}
-
-type eventsMap struct {
-	lock     *sync.RWMutex
-	eventsCB map[string][]*EventListener
-}
-
-func (em *eventsMap) addEvent(eventName string) Status {
-	em.lock.Lock()
-	defer em.lock.Unlock()
-
-	_, ok := em.eventsCB[eventName]
-
-	if !ok {
-		em.eventsCB[eventName] = make([]*EventListener, 0)
-	}
-
-	return WOT_OK
-}
-
-func (em *eventsMap) addListener(eventName string, listener *EventListener) Status {
-	em.lock.Lock()
-	defer em.lock.Unlock()
-
-	_, ok := em.eventsCB[eventName]
-
-	if !ok {
-		return WOT_UNKNOWN_EVENT
-	}
-
-	em.eventsCB[eventName] = append(em.eventsCB[eventName], listener)
-
-	return WOT_OK
-}
-
-func (em *eventsMap) listeners(eventName string) ([]*EventListener, Status) {
-	em.lock.RLock()
-	defer em.lock.RUnlock()
-
-	listeners, ok := em.eventsCB[eventName]
-
-	if !ok {
-		return nil, WOT_UNKNOWN_EVENT
-	}
-
-	return listeners, WOT_OK
+	core *WotCore
+	gs   *async.GenServer
 }
 
 func CreateThing(name string) *WotServer {
@@ -92,95 +23,70 @@ func CreateFromDescriptionUri(uri string) *WotServer {
 }
 
 func CreateFromDescription(td *model.ThingDescription) *WotServer {
-	events := &eventsMap{
-		lock:     &sync.RWMutex{},
-		eventsCB: make(map[string][]*EventListener),
-	}
-
-	for _, ev := range td.Events {
-		events.addEvent(ev.Name)
-	}
+	core := NewWotCoreFromTD(td)
+	gs := newGenServer(core)
 
 	return &WotServer{
-		td:     td,
-		gs:     setup(),
-		events: events,
+		core: core,
+		gs:   gs,
 	}
 }
 
 func (s *WotServer) Name() string {
-	return s.td.Name
+	return s.core.td.Name
 }
 
-func (s *WotServer) GetDescription() *model.ThingDescription {
-	return s.td
-}
+// ----- DEFINITIONS
 
-func (s *WotServer) AddProperty(propertyName string, property interface{}) *WotServer {
-	//Should we update TD?
-	panic("Add property not implemented!")
-}
-
-func (s *WotServer) OnUpdateProperty(propertyName string, propUpdateListener func(newValue interface{})) *WotServer {
-	s.gs.Call(SET_PROPERTY_HANDLER, &SetPropertyHandlerMsg{
-		name: propertyName,
-		fn:   propUpdateListener,
-	})
-
+func (s *WotServer) AddProperty(propertyName string, property model.Property) *WotServer {
+	s.core.PropertyAdd(property)
 	return s
 }
 
 func (s *WotServer) OnGetProperty(propertyName string, propertyRetriever func() interface{}) *WotServer {
-	s.gs.Call(GET_PROPERTY_HANDLER, &GetPropertyHandlerMsg{
-		name: propertyName,
-		fn:   propertyRetriever,
-	})
-
+	if s.core.checkProperty(propertyName) == false {
+		panic("Property not defined.")
+	}
+	s.core.propGetCB[propertyName] = propertyRetriever
 	return s
 }
 
-func (s *WotServer) GetProperty(propertyName string) *async.Value {
-	return s.gs.Call(GET_PROPERTY, &GetPropertyMsg{
-		name: propertyName,
-	})
+func (s *WotServer) OnUpdateProperty(propertyName string, propUpdateListener func(newValue interface{})) *WotServer {
+	if s.core.checkProperty(propertyName) == false {
+		panic("Property not defined.")
+	}
+	s.core.propSetCB[propertyName] = propUpdateListener
+	return s
 }
 
-func (s *WotServer) SetProperty(propertyName string, newValue interface{}) *async.Value {
-	return s.gs.Call(SET_PROPERTY, &SetPropertyMsg{
-		name:  propertyName,
-		value: newValue,
-	})
-}
-
-func (s *WotServer) AddAction(actionName string, inputType interface{}, outputType interface{}) *WotServer {
-	panic("Add action not implemented!")
+func (s *WotServer) AddAction(actionName string, inputType model.InputData, outputType model.OutputData) *WotServer {
+	action := model.Action{
+		Name:       actionName,
+		InputData:  inputType,
+		OutputData: outputType,
+	}
+	s.core.ActionAdd(action)
+	return s
 }
 
 func (s *WotServer) OnInvokeAction(actionName string, actionHandler ActionHandler) *WotServer {
-	s.gs.Call(ACTION_HANDLER_ADD, &ActionHandlerAddMsg{
-		name: actionName,
-		fn:   actionHandler,
-	})
-
+	if s.core.checkAction(actionName) == false {
+		panic("Action not defined.")
+	}
+	s.core.actionCB[actionName] = actionHandler
 	return s
 }
 
-func (s *WotServer) InvokeAction(actionName string, arg interface{}, ph async.ProgressHandler) *async.Value {
-	return s.gs.Call(ACTION_HANDLER_CALL, &ActionHandlerCallMsg{
-		name: actionName,
-		arg:  arg,
-		ph:   ph,
-	})
-}
-
-func (s *WotServer) AddEvent(eventName string, payloadType interface{}) *WotServer {
-	s.events.addEvent(eventName)
+func (s *WotServer) AddEvent(eventName string, event model.Event) *WotServer {
+	s.core.EventAdd(event)
 	return s
 }
 
 func (s *WotServer) AddListener(eventName string, listener *EventListener) *WotServer {
-	//FIXME we should check for event rpesense
-	s.events.addListener(eventName, listener)
+	if s.core.checkEvent(eventName) == false {
+		panic("Event not defined.")
+	}
+	s.core.addListener(eventName, listener)
 	return s
 }
 
@@ -195,14 +101,42 @@ func (s *WotServer) RemoveAllListeners(eventName string) *WotServer {
 	return s
 }
 
+// ----- CALLS
+
+func (s *WotServer) GetDescription() model.ThingDescription {
+	return *s.core.td
+}
+
+func (s *WotServer) GetProperty(propertyName string) *async.Promise {
+	return s.gs.Call(GET_PROPERTY, &GetPropertyMsg{
+		name: propertyName,
+	})
+}
+
+func (s *WotServer) SetProperty(propertyName string, newValue interface{}) *async.Promise {
+	return s.gs.Call(SET_PROPERTY, &SetPropertyMsg{
+		name:  propertyName,
+		value: newValue,
+	})
+}
+
+func (s *WotServer) InvokeAction(actionName string, arg interface{}, ph async.ProgressHandler) *async.Promise {
+	ph.Schedule(arg)
+
+	return s.gs.Call(ACTION_HANDLER_CALL, &ActionHandlerCallMsg{
+		name: actionName,
+		arg:  arg,
+		ph:   ph,
+	})
+}
+
 func (s *WotServer) EmitEvent(eventName string, data interface{}) Status {
-	listeners, status := s.events.listeners(eventName)
+	listeners, status := s.core.listeners(eventName)
 
 	if status != WOT_OK {
 		return status
 	}
 
-	// TODO: Check panic safety
 	async.Run(func() interface{} {
 		event := newEvent(eventName, data)
 		for _, eventListener := range listeners {

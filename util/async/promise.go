@@ -18,7 +18,7 @@ func Run(task func() interface{}) *Promise {
 
 func NewPromise() *Promise {
 	return &Promise{
-		pch: make(chan interface{}),
+		pch: make(chan interface{}, 1),
 	}
 }
 
@@ -32,8 +32,12 @@ func (prev *Promise) Then(callback func(response interface{}) interface{}) *Prom
 	return next
 }
 
-func (prev *Promise) Get() interface{} {
-	return <-prev.pch
+func (p *Promise) Get() interface{} {
+	return <-p.pch
+}
+
+func (p *Promise) Set(data interface{}) {
+	p.pch <- data
 }
 
 // ----- Promise With Progress Update

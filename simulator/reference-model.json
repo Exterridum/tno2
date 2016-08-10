@@ -16,6 +16,7 @@
                 "minimum": 0,
                 "maximum": 255
             },
+            "unit": "ms",
             "writable": true,
             "hrefs": [
                 "property/rw-number"
@@ -24,13 +25,11 @@
     ],
     "actions": [
         {
-            "@type": "long-running",
             "name": "long-running",
             "inputData": {
                 "valueType": {
                     "type": "integer"
-                },
-                "unit": "ms"
+                }
             },
             "hrefs": [
                 "action/long-running"

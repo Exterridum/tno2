@@ -29,7 +29,7 @@ type Http struct {
 
 var hostname = "http://localhost:8080"
 
-func NewHttp(port int) *Http {
+func HttpFrontend(port int) *Http {
 	// r.PathPrefix("/model").HandlerFunc(Model)
 	http := &Http{
 		port:          port,
@@ -45,15 +45,16 @@ func NewHttp(port int) *Http {
 	return http
 }
 
-func (p *Http) Bind(ctxPath string, s *WotServer) {
+func (p *Http) Bind(ctxPath string, s *WotServer) *Http {
 	td := s.GetDescription()
 	p.wotServers[ctxPath] = s
 	p.createRoutes(ctxPath, td)
-
 	updateThingDescription(ctxPath, td)
+
+	return p
 }
 
-func updateThingDescription(ctxPath string, td *model.ThingDescription) {
+func updateThingDescription(ctxPath string, td model.ThingDescription) {
 	td.Uris = append(td.Uris, str.Concat(hostname, ctxPath))
 	td.Encodings = encoder.Registry.Registered()
 }
@@ -81,7 +82,7 @@ func (p *Http) registerRoot() {
 
 // ----- ThingDescription parser methods
 
-func (p *Http) createRoutes(ctxPath string, td *model.ThingDescription) {
+func (p *Http) createRoutes(ctxPath string, td model.ThingDescription) {
 	p.registerDeviceRoot(ctxPath)
 	p.registerDeviceDescriptor(ctxPath, td)
 	p.registerProperties(ctxPath, td.Properties)
@@ -101,7 +102,7 @@ func (p *Http) registerDeviceRoot(ctxPath string) {
 	})
 }
 
-func (p *Http) registerDeviceDescriptor(ctxPath string, td *model.ThingDescription) {
+func (p *Http) registerDeviceDescriptor(ctxPath string, td model.ThingDescription) {
 	p.addRoute(&route{
 		method:  "GET",
 		pattern: contextPath(ctxPath, "description"),
@@ -238,7 +239,6 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 		clients := async.NewFanOut()
 		p.subscribers.CreateSubscription(actionID, clients)
 		ph := NewWotProgressHandler(actionName, slot, clients)
-		ph.Schedule(wo)
 		wotServer.InvokeAction(actionName, wo, ph)
 
 		hrefs := links(websocketSubURL(r, actionID), httpSubURL(r, actionID))

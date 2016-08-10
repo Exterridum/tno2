@@ -1,10 +1,10 @@
 package async
 
-// Performance testing shows that channels are very slow, need to reimplement using another pattern
+// Performance testing shows that channels are slow
 type GenServer struct {
 	handlers map[MessageType]func(interface{}) interface{}
 	in       chan<- interface{}
-	res      *Value
+	res      *Promise
 	actor    *Actor
 }
 
@@ -20,7 +20,7 @@ type MessageType int
 
 type Message struct {
 	msgType MessageType
-	res     *Value
+	res     *Promise
 	data    interface{}
 }
 
@@ -35,11 +35,11 @@ func (gs *GenServer) Start() {
 }
 
 func (gs *GenServer) panicHandler(err interface{}) {
-	gs.res.set(err)
+	gs.res.Set(err)
 }
 
-func (gs *GenServer) Call(msgType MessageType, data interface{}) *Value {
-	res := newValue()
+func (gs *GenServer) Call(msgType MessageType, data interface{}) *Promise {
+	res := NewPromise()
 
 	gs.in <- &Message{
 		msgType: msgType,
@@ -56,6 +56,6 @@ func (gs *GenServer) processor(in <-chan interface{}) {
 		msg := mail.(*Message)
 		gs.res = msg.res
 		r := gs.handlers[msg.msgType](msg.data)
-		gs.res.set(r)
+		gs.res.Set(r)
 	}
 }
