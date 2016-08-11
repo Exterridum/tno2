@@ -4,7 +4,7 @@ package async
 type GenServer struct {
 	handlers map[MessageType]func(interface{}) interface{}
 	in       chan<- interface{}
-	res      *Promise
+	prom     *Promise
 	actor    *Actor
 }
 
@@ -20,7 +20,7 @@ type MessageType int
 
 type Message struct {
 	msgType MessageType
-	res     *Promise
+	prom    *Promise
 	data    interface{}
 }
 
@@ -35,27 +35,29 @@ func (gs *GenServer) Start() {
 }
 
 func (gs *GenServer) panicHandler(err interface{}) {
-	gs.res.Set(err)
+	gs.prom.Set(err)
 }
 
 func (gs *GenServer) Call(msgType MessageType, data interface{}) *Promise {
-	res := NewPromise()
+	prom := NewPromise()
 
 	gs.in <- &Message{
 		msgType: msgType,
-		res:     res,
+		prom:    prom,
 		data:    data,
 	}
 
-	return res
+	return prom
 }
 
 func (gs *GenServer) processor(in <-chan interface{}) {
 	for {
 		mail := <-in
 		msg := mail.(*Message)
-		gs.res = msg.res
+		//current promise needs to be cached so in case of panic,
+		//panic handler can fulfill the promise
+		gs.prom = msg.prom
 		r := gs.handlers[msg.msgType](msg.data)
-		gs.res.Set(r)
+		gs.prom.Set(r)
 	}
 }

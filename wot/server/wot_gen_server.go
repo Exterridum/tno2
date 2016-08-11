@@ -43,7 +43,6 @@ type ActionHandler func(interface{}, async.ProgressHandler) interface{}
 
 // WotGentServer provides process isolation for device represented by one goroutine
 func newGenServer(wc *WotCore) *async.GenServer {
-
 	gs := async.NewGenServer().
 		HandleCall(ACTION_HANDLER_CALL, func(arg interface{}) interface{} {
 			msg := arg.(*ActionHandlerCallMsg)

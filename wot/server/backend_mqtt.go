@@ -29,6 +29,8 @@ func MQTTBackend(url string) *MQTT {
 }
 
 func (mb *MQTT) Bind(baseTopic string, s *WotServer) {
+	s.OnGetProperty
+
 	// inTopic := str.Concat(baseTopic, "/i")
 	// token1 := mb.client.Subscribe(inTopic, 0, inHandler(s))
 	// if token1.Wait() && token1.Error() != nil {

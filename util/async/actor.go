@@ -38,6 +38,12 @@ func (a *Actor) start() {
 
 func (a *Actor) read() {
 	defer a.recovery()
+	//a.processor is message processing loop. In case of processor panic
+	//a.run = false is bypassed and defered recovery method takes controll
+	//calling goroutine the restarts the reading loop
+	//In case of processor is finished normally, e.g. channel is closed
+	//a.run flag is set to false, function ends and goroutine will not
+	//attempt to restart processing loop.
 	a.processor(a.in)
 	a.run = false
 }
