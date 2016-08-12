@@ -1,11 +1,7 @@
 package backend
 
 import (
-	"fmt"
-	"net/url"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -122,63 +118,4 @@ func outSubHandler(wos *server.WotServer, codec Codec, conversations *async.Asyn
 			wos.EmitEvent(msgName, msgData)
 		}
 	}
-}
-
-const (
-	BE_ACTION_RQ        int8 = 0
-	BE_ACTION_RS        int8 = 1
-	BE_GET_PROP_RQ      int8 = 2
-	BE_GET_PROP_RS      int8 = 3
-	BE_SET_PROP_RQ      int8 = 4
-	BE_EVENT            int8 = 5
-	BE_UNKNOWN_MSG_TYPE int8 = 6
-)
-
-type Codec interface {
-	Decode(buf []byte) (msgType int8, conversationID string, msgName string, data interface{})
-	Encode(msgType int8, conversationID string, msgName string, data interface{}) []byte
-}
-
-type SimpleCodec struct {
-}
-
-func (sc *SimpleCodec) Decode(buf []byte) (int8, string, string, interface{}) {
-	data := string(buf)
-	nd := strings.Split(data, ":")
-	msgTypeCode, _ := strconv.ParseInt(nd[0], 10, 8)
-	conversationID := nd[1]
-	msgName := nd[2]
-	msgData := fromUrlQ(nd[3])
-
-	switch int8(msgTypeCode) {
-	case BE_ACTION_RS:
-		return BE_ACTION_RS, conversationID, msgName, msgData
-	case BE_GET_PROP_RS:
-		return BE_GET_PROP_RS, conversationID, msgName, msgData
-	case BE_EVENT:
-		return BE_EVENT, "", msgName, msgData
-	default:
-		return BE_UNKNOWN_MSG_TYPE, "", "", nil
-	}
-}
-
-func fromUrlQ(data string) map[string][]string {
-	m, _ := url.ParseQuery(data)
-	return m
-}
-
-func (sc *SimpleCodec) Encode(msgType int8, conversationID string, msgName string, data interface{}) []byte {
-	d := data.(map[string]interface{})
-	ds := str.Concat(msgType, ":", conversationID, ":", msgName, ":", toUrlQ(d))
-	return []byte(ds)
-}
-
-func toUrlQ(data map[string]interface{}) string {
-	log.Info("toUrlQ", data)
-
-	params := url.Values{}
-	for k, v := range data {
-		params.Add(k, fmt.Sprintf("%v", v))
-	}
-	return params.Encode()
 }

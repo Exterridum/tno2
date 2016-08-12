@@ -8,7 +8,6 @@ import (
 	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/util/sec"
 	"github.com/conas/tno2/util/str"
-	"github.com/conas/tno2/wot/encoder"
 	"github.com/conas/tno2/wot/model"
 	"github.com/conas/tno2/wot/server"
 	"github.com/gorilla/mux"
@@ -57,7 +56,7 @@ func (p *Http) Bind(ctxPath string, s *server.WotServer) *Http {
 
 func updateThingDescription(ctxPath string, td model.ThingDescription) {
 	td.Uris = append(td.Uris, str.Concat(hostname, ctxPath))
-	td.Encodings = encoder.Registry.Registered()
+	td.Encodings = Encoders.Registered()
 }
 
 func (p *Http) Start() {
@@ -300,7 +299,7 @@ func writeData(wsc *websocket.Conn, r *http.Request, v interface{}) error {
 		return err
 	}
 
-	encoder, err := encoder.Registry.Get("JSON")
+	encoder, err := Encoders.Get("JSON")
 	if err != nil {
 		w.Write([]byte("Unsupported Encoding: JSON"))
 		return err
@@ -425,7 +424,7 @@ func contextPath(ctxPath, element string) string {
 }
 
 func readBody(r *http.Request, t interface{}) error {
-	encoder, err := encoder.Registry.Get("JSON")
+	encoder, err := Encoders.Get("JSON")
 
 	if err != nil {
 		return err
@@ -441,7 +440,7 @@ func readBody(r *http.Request, t interface{}) error {
 }
 
 func sendOK(w http.ResponseWriter, r *http.Request, payload interface{}) {
-	encoder, err := encoder.Registry.Get("JSON")
+	encoder, err := Encoders.Get("JSON")
 
 	if err != nil {
 		sendPlainERR(w, err)
@@ -454,7 +453,7 @@ func sendOK(w http.ResponseWriter, r *http.Request, payload interface{}) {
 }
 
 func sendERR(w http.ResponseWriter, r *http.Request, payload interface{}) {
-	encoder, err := encoder.Registry.Get("JSON")
+	encoder, err := Encoders.Get("JSON")
 
 	if err != nil {
 		sendPlainERR(w, err)

@@ -1,4 +1,4 @@
-package encoder
+package frontend
 
 import (
 	"encoding/json"
@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	Registry.Register(&JsonEncoder{})
+	Encoders.Register(&JsonEncoder{})
 }
 
 type JsonEncoder struct{}

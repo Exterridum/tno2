@@ -33,3 +33,15 @@ func (am *AsyncMap) Del(k string) {
 	delete(am.v, k)
 	am.l.Unlock()
 }
+
+func (am *AsyncMap) Keys() []string {
+	am.l.RLock()
+
+	keys := make([]string, 0, len(am.v))
+	for k := range am.v {
+		keys = append(keys, k)
+	}
+
+	am.l.RUnlock()
+	return keys
+}
