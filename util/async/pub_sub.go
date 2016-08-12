@@ -20,6 +20,7 @@ func (fo *FanOut) AddSubscriber(out chan<- interface{}) int {
 	fo.mutex.Lock()
 	defer fo.mutex.Unlock()
 
+	//FIXME: Bug! avoid using map length as client ID
 	size := len(fo.out)
 	fo.out[size] = out
 

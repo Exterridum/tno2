@@ -1,4 +1,4 @@
-package server
+package frontend
 
 import (
 	"log"
@@ -10,6 +10,7 @@ import (
 	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot/encoder"
 	"github.com/conas/tno2/wot/model"
+	"github.com/conas/tno2/wot/server"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
@@ -20,24 +21,24 @@ type Http struct {
 	port          int
 	router        *mux.Router
 	hrefs         []string
-	wotServers    map[string]*WotServer
-	subscribers   *Subscribers
-	actionResults *ActionResults
+	wotServers    map[string]*server.WotServer
+	subscribers   *server.Subscribers
+	actionResults *server.ActionResults
 }
 
 // ----- Server API methods
 
 var hostname = "http://localhost:8080"
 
-func HttpFrontend(port int) *Http {
+func NewHTTP(port int) *Http {
 	// r.PathPrefix("/model").HandlerFunc(Model)
 	http := &Http{
 		port:          port,
 		router:        mux.NewRouter().StrictSlash(true),
 		hrefs:         make([]string, 0),
-		wotServers:    make(map[string]*WotServer),
-		subscribers:   NewSubscribers(),
-		actionResults: NewActionResults(),
+		wotServers:    make(map[string]*server.WotServer),
+		subscribers:   server.NewSubscribers(),
+		actionResults: server.NewActionResults(),
 	}
 
 	http.registerRoot()
@@ -45,7 +46,7 @@ func HttpFrontend(port int) *Http {
 	return http
 }
 
-func (p *Http) Bind(ctxPath string, s *WotServer) *Http {
+func (p *Http) Bind(ctxPath string, s *server.WotServer) *Http {
 	td := s.GetDescription()
 	p.wotServers[ctxPath] = s
 	p.createRoutes(ctxPath, td)
@@ -174,14 +175,6 @@ func (p *Http) registerEvents(ctxPath string, events []model.Event) {
 	}
 }
 
-type WotObject struct {
-	Value interface{} `json:"value"`
-}
-
-func (w *WotObject) GetValue() interface{} {
-	return w.GetValue()
-}
-
 func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		value := p.wotServers[ctxPath].GetProperty(prop.Name)
@@ -189,8 +182,8 @@ func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w h
 		data := value.Get()
 
 		switch data.(type) {
-		case Status:
-			if data.(Status) != WOT_OK {
+		case server.Status:
+			if data.(server.Status) != server.WOT_OK {
 				sendERR(w, r, data)
 			}
 		case error:
@@ -203,7 +196,7 @@ func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w h
 
 func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		wo := WotObject{}
+		var wo interface{}
 		err := readBody(r, &wo)
 
 		if err != nil {
@@ -211,12 +204,12 @@ func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w h
 			return
 		}
 
-		value := p.wotServers[ctxPath].SetProperty(prop.Name, wo.GetValue())
+		value := p.wotServers[ctxPath].SetProperty(prop.Name, wo)
 		data := value.Get()
 
 		switch data.(type) {
-		case Status:
-			if data.(Status) != WOT_OK {
+		case server.Status:
+			if data.(server.Status) != server.WOT_OK {
 				sendERR(w, r, data)
 			}
 		case error:
@@ -225,9 +218,9 @@ func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w h
 	}
 }
 
-func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(w http.ResponseWriter, r *http.Request) {
+func (p *Http) actionStartHandler(wotServer *server.WotServer, actionName string) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		wo := WotObject{}
+		var wo interface{}
 		err := readBody(r, &wo)
 
 		if err != nil {
@@ -238,7 +231,7 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 		actionID, slot := p.actionResults.CreateSlot()
 		clients := async.NewFanOut()
 		p.subscribers.CreateSubscription(actionID, clients)
-		ph := NewWotProgressHandler(actionName, slot, clients)
+		ph := server.NewWotProgressHandler(actionName, slot, clients)
 		wotServer.InvokeAction(actionName, wo, ph)
 
 		hrefs := links(websocketSubURL(r, actionID), httpSubURL(r, actionID))
@@ -246,7 +239,7 @@ func (p *Http) actionStartHandler(wotServer *WotServer, actionName string) func(
 	}
 }
 
-func (p *Http) actionTaskHandler(wotServer *WotServer) func(http.ResponseWriter, *http.Request) {
+func (p *Http) actionTaskHandler(wotServer *server.WotServer) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		taskid := vars["taskid"]
@@ -260,7 +253,7 @@ func (p *Http) actionTaskHandler(wotServer *WotServer) func(http.ResponseWriter,
 	}
 }
 
-func (p *Http) actionWSTaskHandler(wotServer *WotServer) func(w http.ResponseWriter, r *http.Request) {
+func (p *Http) actionWSTaskHandler(wotServer *server.WotServer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		taskid := vars["taskid"]
@@ -269,7 +262,7 @@ func (p *Http) actionWSTaskHandler(wotServer *WotServer) func(w http.ResponseWri
 	}
 }
 
-func (p *Http) wsHandler(wotServer *WotServer, handlerId string, welcomeValue interface{}, w http.ResponseWriter, r *http.Request) {
+func (p *Http) wsHandler(wotServer *server.WotServer, handlerId string, welcomeValue interface{}, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
@@ -327,7 +320,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) func(http.ResponseWriter, *http.Request) {
+func (p *Http) eventSubscribeHandler(wotServer *server.WotServer, eventName string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		subscriptionID, _ := sec.UUID4()
 		clients := async.NewFanOut()
@@ -340,7 +333,7 @@ func (p *Http) eventSubscribeHandler(wotServer *WotServer, eventName string) fun
 	}
 }
 
-func (p *Http) eventWSClientHandler(wotServer *WotServer) func(w http.ResponseWriter, r *http.Request) {
+func (p *Http) eventWSClientHandler(wotServer *server.WotServer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		subscriptionID := vars["subscriptionID"]
@@ -348,8 +341,8 @@ func (p *Http) eventWSClientHandler(wotServer *WotServer) func(w http.ResponseWr
 	}
 }
 
-func (p *Http) eventHandler(uuid string, clients *async.FanOut) *EventListener {
-	el := &EventListener{
+func (p *Http) eventHandler(uuid string, clients *async.FanOut) *server.EventListener {
+	el := &server.EventListener{
 		ID: uuid,
 		CB: func(event interface{}) {
 			clients.Publish(event)

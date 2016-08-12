@@ -123,7 +123,7 @@ func (s *WotServer) SetProperty(propertyName string, newValue interface{}) *asyn
 func (s *WotServer) InvokeAction(actionName string, arg interface{}, ph async.ProgressHandler) *async.Promise {
 	ph.Schedule(arg)
 
-	return s.gs.Call(ACTION_HANDLER_CALL, &ActionHandlerCallMsg{
+	return s.gs.Call(ACTION_CALL, &ActionHandlerCallMsg{
 		name: actionName,
 		arg:  arg,
 		ph:   ph,

@@ -7,7 +7,7 @@ type AsyncMap struct {
 	v map[string]interface{}
 }
 
-func Create() *AsyncMap {
+func NewAsyncMap() *AsyncMap {
 	return &AsyncMap{
 		l: &sync.RWMutex{},
 		v: make(map[string]interface{}),

@@ -1,10 +1,6 @@
 package server
 
-import (
-	"log"
-
-	"github.com/conas/tno2/util/async"
-)
+import "github.com/conas/tno2/util/async"
 
 type Status int
 
@@ -19,7 +15,7 @@ const (
 )
 
 const (
-	ACTION_HANDLER_CALL async.MessageType = iota
+	ACTION_CALL async.MessageType = iota
 	GET_PROPERTY
 	SET_PROPERTY
 )
@@ -44,7 +40,7 @@ type ActionHandler func(interface{}, async.ProgressHandler) interface{}
 // WotGentServer provides process isolation for device represented by one goroutine
 func newGenServer(wc *WotCore) *async.GenServer {
 	gs := async.NewGenServer().
-		HandleCall(ACTION_HANDLER_CALL, func(arg interface{}) interface{} {
+		HandleCall(ACTION_CALL, func(arg interface{}) interface{} {
 			msg := arg.(*ActionHandlerCallMsg)
 
 			handler, ok := wc.actionCB[msg.name]
@@ -52,8 +48,6 @@ func newGenServer(wc *WotCore) *async.GenServer {
 			if !ok {
 				return WOT_NO_ACTION_HANDLER
 			}
-
-			log.Printf("Action start %s", msg.name)
 
 			//Progress handler scheduled status is set at wot_server level.
 			result := handler(msg.arg, msg.ph)
