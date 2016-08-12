@@ -6,6 +6,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/conas/tno2/util/async"
+	"github.com/conas/tno2/util/col"
 	"github.com/conas/tno2/util/sec"
 	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot/server"
@@ -14,7 +15,7 @@ import (
 
 type MQTT struct {
 	client   mqtt.Client
-	bindings map[string]*async.Map
+	bindings map[string]*col.Map
 }
 
 func NewMQTT(url string) *MQTT {
@@ -29,13 +30,13 @@ func NewMQTT(url string) *MQTT {
 
 	return &MQTT{
 		client:   c,
-		bindings: make(map[string]*async.Map),
+		bindings: make(map[string]*col.Map),
 	}
 }
 
 func (mb *MQTT) Bind(baseTopic string, wos *server.WotServer, codec Codec) {
 	bindingID, _ := sec.UUID4()
-	mb.bindings[bindingID] = async.NewConcurentMap()
+	mb.bindings[bindingID] = col.NewConcurentMap()
 
 	mb.setupDeviceIn(bindingID, baseTopic, wos, codec)
 	mb.setupDeviceOut(bindingID, baseTopic, wos, codec)
@@ -103,7 +104,7 @@ func (mb *MQTT) setupDeviceOut(bindingID string, baseTopic string, wos *server.W
 	}
 }
 
-func outSubHandler(wos *server.WotServer, codec Codec, conversations *async.Map) func(mqtt.Client, mqtt.Message) {
+func outSubHandler(wos *server.WotServer, codec Codec, conversations *col.Map) func(mqtt.Client, mqtt.Message) {
 	return func(client mqtt.Client, m mqtt.Message) {
 		msgType, conversationID, msgName, msgData := codec.Decode(m.Payload())
 

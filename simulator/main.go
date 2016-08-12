@@ -3,23 +3,25 @@ package main
 import (
 	"time"
 
+	"github.com/conas/tno2/util/col"
 	"github.com/conas/tno2/wot/backend"
 	"github.com/conas/tno2/wot/frontend"
+	"github.com/conas/tno2/wot/platform"
 	"github.com/conas/tno2/wot/server"
 )
 
 var refModel = "file://reference-model.json"
 
 func main() {
-	p := NewPlatform()
+	p := platform.NewPlatform()
 
-	fe1 := NewComponentConfig("HTTP", KV("port", 8080))
+	fe1 := platform.NewComponentConfig("HTTP", col.KV("port", 8080))
 	p.AddFronted("http-1", fe1)
 
-	be1 := NewComponentConfig("MQTT", KV("url", "tcp://localhost"), KV("port", 1883))
+	be1 := platform.NewComponentConfig("MQTT", col.KV("url", "tcp://localhost"), col.KV("port", 1883))
 	p.AddBackend("mqtt-1", be1)
 
-	simulator := NewWotServer("file://reference-model.json", "mqtt-1", "http-1")
+	simulator := platform.NewWotServer("file://reference-model.json", "mqtt-1", "http-1")
 	p.AddWotServer("simulator", simulator)
 	p.Start()
 
@@ -37,72 +39,4 @@ func startEventGenerator(wotServet *server.WotServer) {
 			time.Sleep(time.Second * 5)
 		}
 	}()
-}
-
-type Platform struct {
-	frontends map[string]*ComponentConfig
-	backends  map[string]*ComponentConfig
-	wots      map[string]*WotConfig
-}
-
-func NewPlatform() *Platform {
-	return &Platform{
-		frontends: make(map[string]*ComponentConfig),
-		backends:  make(map[string]*ComponentConfig),
-		wots:      make(map[string]*WotConfig),
-	}
-}
-
-func (p *Platform) AddFronted(id string, cc *ComponentConfig) {
-	p.frontends[id] = cc
-}
-
-func (p *Platform) AddBackend(id string, cc *ComponentConfig) {
-	p.backends[id] = cc
-}
-
-func (p *Platform) AddWotServer(id string, wotConfig *WotConfig) {
-	p.wots[id] = wotConfig
-}
-
-func (p *Platform) Start() {
-}
-
-type ComponentConfig struct {
-	componentType string
-	params        map[string]interface{}
-}
-
-func NewComponentConfig(componentType string, cfgParams ...*KeyValue) *ComponentConfig {
-	params := make(map[string]interface{})
-	for _, cfg := range cfgParams {
-		params[cfg.k] = cfg.v
-	}
-
-	return &ComponentConfig{
-		componentType: componentType,
-		params:        params,
-	}
-}
-
-type KeyValue struct {
-	k string
-	v interface{}
-}
-
-func KV(k string, v interface{}) *KeyValue {
-	return &KeyValue{
-		k: k,
-		v: v,
-	}
-}
-
-type WotConfig struct {
-	modelUri  string
-	frontends []string
-	backends  []string
-}
-
-func NewWotServer(uri, backend string, frontends ...string) *WotConfig {
-	return nil
 }

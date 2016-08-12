@@ -1,4 +1,4 @@
-package async
+package col
 
 import "sync"
 
@@ -44,4 +44,16 @@ func (am *Map) Keys() []string {
 
 	am.l.RUnlock()
 	return keys
+}
+
+type KeyValue struct {
+	K string
+	V interface{}
+}
+
+func KV(k string, v interface{}) *KeyValue {
+	return &KeyValue{
+		K: k,
+		V: v,
+	}
 }

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/conas/tno2/util/async"
+	"github.com/conas/tno2/util/col"
 	"github.com/conas/tno2/util/str"
 )
 
@@ -21,12 +21,12 @@ type Encoder interface {
 }
 
 type EncoderRegistry struct {
-	reg *async.Map
+	reg *col.Map
 }
 
 func NewEncoderRegistry() *EncoderRegistry {
 	return &EncoderRegistry{
-		reg: async.NewConcurentMap(),
+		reg: col.NewConcurentMap(),
 	}
 }
 
