@@ -14,7 +14,7 @@ import (
 
 type MQTT struct {
 	client   mqtt.Client
-	bindings map[string]*async.AsyncMap
+	bindings map[string]*async.Map
 }
 
 func NewMQTT(url string) *MQTT {
@@ -29,13 +29,13 @@ func NewMQTT(url string) *MQTT {
 
 	return &MQTT{
 		client:   c,
-		bindings: make(map[string]*async.AsyncMap),
+		bindings: make(map[string]*async.Map),
 	}
 }
 
 func (mb *MQTT) Bind(baseTopic string, wos *server.WotServer, codec Codec) {
 	bindingID, _ := sec.UUID4()
-	mb.bindings[bindingID] = async.NewAsyncMap()
+	mb.bindings[bindingID] = async.NewConcurentMap()
 
 	mb.setupDeviceIn(bindingID, baseTopic, wos, codec)
 	mb.setupDeviceOut(bindingID, baseTopic, wos, codec)
@@ -103,7 +103,7 @@ func (mb *MQTT) setupDeviceOut(bindingID string, baseTopic string, wos *server.W
 	}
 }
 
-func outSubHandler(wos *server.WotServer, codec Codec, conversations *async.AsyncMap) func(mqtt.Client, mqtt.Message) {
+func outSubHandler(wos *server.WotServer, codec Codec, conversations *async.Map) func(mqtt.Client, mqtt.Message) {
 	return func(client mqtt.Client, m mqtt.Message) {
 		msgType, conversationID, msgName, msgData := codec.Decode(m.Payload())
 

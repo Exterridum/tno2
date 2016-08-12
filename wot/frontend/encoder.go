@@ -21,12 +21,12 @@ type Encoder interface {
 }
 
 type EncoderRegistry struct {
-	reg *async.AsyncMap
+	reg *async.Map
 }
 
 func NewEncoderRegistry() *EncoderRegistry {
 	return &EncoderRegistry{
-		reg: async.NewAsyncMap(),
+		reg: async.NewConcurentMap(),
 	}
 }
 

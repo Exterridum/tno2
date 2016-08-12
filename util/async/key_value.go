@@ -2,25 +2,25 @@ package async
 
 import "sync"
 
-type AsyncMap struct {
+type Map struct {
 	l *sync.RWMutex
 	v map[string]interface{}
 }
 
-func NewAsyncMap() *AsyncMap {
-	return &AsyncMap{
+func NewConcurentMap() *Map {
+	return &Map{
 		l: &sync.RWMutex{},
 		v: make(map[string]interface{}),
 	}
 }
 
-func (am *AsyncMap) Add(k string, v interface{}) {
+func (am *Map) Add(k string, v interface{}) {
 	am.l.Lock()
 	am.v[k] = v
 	am.l.Unlock()
 }
 
-func (am *AsyncMap) Get(k string) (interface{}, bool) {
+func (am *Map) Get(k string) (interface{}, bool) {
 	am.l.RLock()
 	v, ok := am.v[k]
 	am.l.RUnlock()
@@ -28,13 +28,13 @@ func (am *AsyncMap) Get(k string) (interface{}, bool) {
 	return v, ok
 }
 
-func (am *AsyncMap) Del(k string) {
+func (am *Map) Del(k string) {
 	am.l.Lock()
 	delete(am.v, k)
 	am.l.Unlock()
 }
 
-func (am *AsyncMap) Keys() []string {
+func (am *Map) Keys() []string {
 	am.l.RLock()
 
 	keys := make([]string, 0, len(am.v))

@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/conas/tno2/util/str"
 )
 
@@ -45,8 +44,6 @@ func (sc *SimpleCodec) Encode(msgType int8, conversationID string, msgName strin
 }
 
 func toUrlQ(data map[string]interface{}) string {
-	log.Info("toUrlQ", data)
-
 	params := url.Values{}
 	for k, v := range data {
 		params.Add(k, fmt.Sprintf("%v", v))
