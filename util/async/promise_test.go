@@ -1,26 +1,22 @@
 package async
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 func TestCase1(t *testing.T) {
-	Run(func() interface{} {
+	r := Run(func() interface{} {
 		return 3 + 4
 	}).Then(func(val interface{}) interface{} {
 		return 2 * val.(int)
 	}).Then(func(val interface{}) interface{} {
-		Equals(t, 14, val.(int))
-		return nil
-	})
+		return val
+	}).Get()
 
-	time.Sleep(time.Second * 1)
+	Equals("TestCase1", t, 14, r.(int))
 }
 
-func Equals(t *testing.T, expected, actual interface{}) {
+func Equals(assetName string, t *testing.T, expected, actual interface{}) {
 	if expected != actual {
-		t.Log("\nExpected:", expected, "\nReturned:", actual)
+		t.Log("\nTest: ", assetName, "\nExpected:", expected, "\nReturned:", actual)
 		t.Fail()
 	}
 }

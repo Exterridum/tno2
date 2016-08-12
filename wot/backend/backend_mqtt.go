@@ -125,13 +125,13 @@ func outSubHandler(wos *server.WotServer, codec Codec, conversations *async.Asyn
 }
 
 const (
-	BE_ACTION_RQ int8 = iota
-	BE_ACTION_RS
-	BE_GET_PROP_RQ
-	BE_GET_PROP_RS
-	BE_SET_PROP_RQ
-	BE_EVENT
-	BE_UNKNOWN_MSG_TYPE
+	BE_ACTION_RQ        int8 = 0
+	BE_ACTION_RS        int8 = 1
+	BE_GET_PROP_RQ      int8 = 2
+	BE_GET_PROP_RS      int8 = 3
+	BE_SET_PROP_RQ      int8 = 4
+	BE_EVENT            int8 = 5
+	BE_UNKNOWN_MSG_TYPE int8 = 6
 )
 
 type Codec interface {

@@ -2,55 +2,110 @@ package async
 
 import "sync"
 
-//TODO: make performance and memmory tests to decide between go channels and mutexes
-
 type FanOut struct {
-	out   map[int]chan<- interface{}
-	mutex *sync.RWMutex
+	out     map[int]chan<- interface{}
+	l       *sync.RWMutex
+	counter int
+	pool    []int
 }
 
 func NewFanOut() *FanOut {
 	return &FanOut{
-		out:   make(map[int]chan<- interface{}),
-		mutex: &sync.RWMutex{},
+		out:  make(map[int]chan<- interface{}),
+		l:    &sync.RWMutex{},
+		pool: make([]int, 0),
 	}
 }
 
 func (fo *FanOut) AddSubscriber(out chan<- interface{}) int {
-	fo.mutex.Lock()
-	defer fo.mutex.Unlock()
+	fo.l.Lock()
 
-	//FIXME: Bug! avoid using map length as client ID
-	size := len(fo.out)
-	fo.out[size] = out
+	id := fo.nextID()
+	fo.out[id] = out
 
-	return size
+	fo.l.Unlock()
+	return id
+}
+
+func (fo *FanOut) nextID() int {
+	//use id form pool if any available
+	if len(fo.pool) > 0 {
+		id := fo.pool[0]
+		fo.pool = deleteElement(fo.pool, 0)
+		return id
+	}
+
+	for {
+		_, exists := fo.out[fo.counter]
+		if !exists {
+			break
+		}
+		fo.counter++
+	}
+
+	return fo.counter
 }
 
 func (fo *FanOut) RemoveSubscriber(id int) {
-	fo.mutex.Lock()
-	defer fo.mutex.Unlock()
+	fo.l.Lock()
+	//TODO: investigate if close on channel can cause panic. If not move Unlock from defered
+	//to end of the method for performance reasons
+	defer fo.l.Unlock()
 
-	close(fo.out[id])
-	delete(fo.out, id)
+	if _, ok := fo.out[id]; ok {
+		delete(fo.out, id)
+		fo.pool = append(fo.pool, id)
+	}
 }
 
 func (fo *FanOut) RemoveAllSubscribes() {
-	fo.mutex.Lock()
-	defer fo.mutex.Unlock()
+	fo.l.Lock()
+	//TODO: investigate if close on channel can cause panic. If not move Unlock from defered
+	//to end of the method for performance reasons
+	defer fo.l.Unlock()
 
-	//FIXME: Close all subscribers
 	fo.out = make(map[int]chan<- interface{})
+	fo.pool = make([]int, 0)
+	fo.counter = 0
 }
 
 func (fo *FanOut) Publish(event interface{}) {
 	go func() {
-		fo.mutex.RLock()
-		defer fo.mutex.RUnlock()
+		fo.l.RLock()
+		outCopy := mapClone(fo.out)
+		fo.l.RUnlock()
 
-		//FIXME: Naive implementation
-		for _, out := range fo.out {
-			out <- event
+		//non blocking message publish
+		for {
+			if len(outCopy) == 0 {
+				break
+			}
+
+			for k, out := range outCopy {
+				//TODO: should be publishing time limited so we break cycle even of not
+				//all subscribers were not sent messages to?
+				select {
+				case out <- event:
+					//TODO: What is the performance of remove element? If expensive implement
+					//another solution to tag published subscribers
+					delete(outCopy, k)
+				}
+			}
 		}
 	}()
+}
+
+func mapClone(src map[int]chan<- interface{}) map[int]chan<- interface{} {
+	newMap := make(map[int]chan<- interface{})
+
+	for k, v := range src {
+		newMap[k] = v
+	}
+
+	return newMap
+}
+
+func deleteElement(s []int, i int) []int {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
 }
