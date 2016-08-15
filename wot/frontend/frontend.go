@@ -6,7 +6,15 @@ import (
 
 	"github.com/conas/tno2/util/col"
 	"github.com/conas/tno2/util/str"
+	"github.com/conas/tno2/wot/server"
 )
+
+type Factory func(map[string]interface{}) Frontend
+
+type Frontend interface {
+	Bind(ctxPath string, s *server.WotServer)
+	Start()
+}
 
 // ----- CODEC TYPES
 
@@ -16,8 +24,8 @@ const (
 
 type Encoder interface {
 	Info() string
-	Marshal(io.Writer, interface{}) error
-	Unmarshal(io.Reader, interface{}) error
+	Encode(io.Writer, interface{}) error
+	Decode(io.Reader, interface{}) error
 }
 
 type EncoderRegistry struct {
@@ -43,7 +51,7 @@ func (es *EncoderRegistry) Get(code string) (Encoder, error) {
 		return e.(Encoder), nil
 	}
 
-	return nil, errors.New(str.Concat("Unsupported encoding: ", code))
+	return nil, errors.New(str.Concat("Unsupported frontend encoding: ", code))
 }
 
 func (es *EncoderRegistry) Registered() []string {

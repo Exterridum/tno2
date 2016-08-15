@@ -9,10 +9,17 @@ import (
 	"github.com/conas/tno2/util/str"
 )
 
-type SimpleCodec struct {
+func init() {
+	Encoders.Register(&SimpleUrlEncoder{})
 }
 
-func (sc *SimpleCodec) Decode(buf []byte) (int8, string, string, interface{}) {
+type SimpleUrlEncoder struct{}
+
+func (sc *SimpleUrlEncoder) Info() string {
+	return "SIMPLE_URL_ENCODER"
+}
+
+func (sc *SimpleUrlEncoder) Decode(buf []byte) (int8, string, string, interface{}) {
 	data := string(buf)
 	nd := strings.Split(data, ":")
 	msgTypeCode, _ := strconv.ParseInt(nd[0], 10, 8)
@@ -37,7 +44,7 @@ func fromUrlQ(data string) map[string][]string {
 	return m
 }
 
-func (sc *SimpleCodec) Encode(msgType int8, conversationID string, msgName string, data interface{}) []byte {
+func (sc *SimpleUrlEncoder) Encode(msgType int8, conversationID string, msgName string, data interface{}) []byte {
 	d := data.(map[string]interface{})
 	ds := str.Concat(msgType, ":", conversationID, ":", msgName, ":", toUrlQ(d))
 	return []byte(ds)

@@ -18,7 +18,8 @@ type MQTT struct {
 	bindings map[string]*col.Map
 }
 
-func NewMQTT(url string) *MQTT {
+func NewMQTT(cfg map[string]interface{}) Backend {
+	url := cfg["url"].(string)
 	opts := mqtt.NewClientOptions().AddBroker(url).SetClientID("ClientID")
 	opts.SetKeepAlive(20 * time.Second)
 	opts.SetPingTimeout(1 * time.Second)
@@ -34,34 +35,35 @@ func NewMQTT(url string) *MQTT {
 	}
 }
 
-func (mb *MQTT) Bind(baseTopic string, wos *server.WotServer, codec Codec) {
+func (mb *MQTT) Bind(wos *server.WotServer, baseTopic string, encoder Encoder) {
 	bindingID, _ := sec.UUID4()
 	mb.bindings[bindingID] = col.NewConcurentMap()
 
-	mb.setupDeviceIn(bindingID, baseTopic, wos, codec)
-	mb.setupDeviceOut(bindingID, baseTopic, wos, codec)
+	mb.setupDeviceInTopic(bindingID, baseTopic, wos, encoder)
+	mb.setupDeviceOutTopic(bindingID, baseTopic, wos, encoder)
 }
 
-func (mb *MQTT) setupDeviceIn(bindingID string, baseTopic string, wos *server.WotServer, codec Codec) {
-	deviceInTopic := str.Concat(baseTopic, "/i")
+func (mb *MQTT) Start() {}
 
-	log.Info("Will setup actions")
+func (mb *MQTT) setupDeviceInTopic(bindingID string, baseTopic string, wos *server.WotServer, encoder Encoder) {
+	deviceInTopic := str.Concat(baseTopic, "/i")
+	log.Info("MQTTBackend: device in topic -> ", deviceInTopic)
+
 	for _, a := range wos.GetDescription().Actions {
-		log.Info("Action setup ", a.Name)
 		wos.OnInvokeAction(a.Name, func(payload interface{}, ph async.ProgressHandler) interface{} {
 			log.Info("Action invoked ", a.Name, payload)
-			return mb.publish(bindingID, codec, deviceInTopic, BE_ACTION_RQ, a.Name, payload)
+			return mb.publish(bindingID, encoder, deviceInTopic, BE_ACTION_RQ, a.Name, payload)
 		})
 	}
 
 	for _, p := range wos.GetDescription().Properties {
 		wos.OnGetProperty(p.Name, func() interface{} {
-			return mb.publish(bindingID, codec, deviceInTopic, BE_GET_PROP_RQ, p.Name, nil)
+			return mb.publish(bindingID, encoder, deviceInTopic, BE_GET_PROP_RQ, p.Name, nil)
 		})
 
 		if p.Writable {
 			wos.OnUpdateProperty(p.Name, func(payload interface{}) {
-				mb.publish(bindingID, codec, deviceInTopic, BE_SET_PROP_RQ, p.Name, payload)
+				mb.publish(bindingID, encoder, deviceInTopic, BE_SET_PROP_RQ, p.Name, payload)
 			})
 		}
 	}
@@ -69,14 +71,14 @@ func (mb *MQTT) setupDeviceIn(bindingID string, baseTopic string, wos *server.Wo
 
 func (mb *MQTT) publish(
 	bindingID string,
-	codec Codec,
+	encoder Encoder,
 	deviceInTopic string,
 	msgType int8,
 	msgName string,
 	data interface{}) interface{} {
 
 	conversationID, _ := sec.UUID4()
-	urlQ := codec.Encode(msgType, conversationID, msgName, data)
+	urlQ := encoder.Encode(msgType, conversationID, msgName, data)
 
 	var response interface{}
 	var promise *async.Promise
@@ -85,6 +87,7 @@ func (mb *MQTT) publish(
 		mb.bindings[bindingID].Add(conversationID, promise)
 	}
 
+	log.Info("Will publish ", deviceInTopic, " : ", string(urlQ))
 	mb.client.Publish(deviceInTopic, 0, false, urlQ)
 	// wait to receive response on deviceOutTopic to fulfuill the promise
 	// Q: should we timeout?
@@ -96,17 +99,20 @@ func (mb *MQTT) publish(
 	return response
 }
 
-func (mb *MQTT) setupDeviceOut(bindingID string, baseTopic string, wos *server.WotServer, codec Codec) {
+func (mb *MQTT) setupDeviceOutTopic(bindingID string, baseTopic string, wos *server.WotServer, encoder Encoder) {
 	deviceOutTopic := str.Concat(baseTopic, "/o")
-	token2 := mb.client.Subscribe(deviceOutTopic, 0, outSubHandler(wos, codec, mb.bindings[bindingID]))
+	log.Info("MQTTBackend: device out topic -> ", deviceOutTopic)
+	token2 := mb.client.Subscribe(deviceOutTopic, 0, outSubHandler(wos, encoder, mb.bindings[bindingID]))
 	if token2.Wait() && token2.Error() != nil {
 		os.Exit(1)
 	}
 }
 
-func outSubHandler(wos *server.WotServer, codec Codec, conversations *col.Map) func(mqtt.Client, mqtt.Message) {
+func outSubHandler(wos *server.WotServer, encoder Encoder, conversations *col.Map) func(mqtt.Client, mqtt.Message) {
 	return func(client mqtt.Client, m mqtt.Message) {
-		msgType, conversationID, msgName, msgData := codec.Decode(m.Payload())
+		msgType, conversationID, msgName, msgData := encoder.Decode(m.Payload())
+
+		log.Info("MQTT message receive ", string(m.Payload()))
 
 		switch msgType {
 		case BE_ACTION_RS:

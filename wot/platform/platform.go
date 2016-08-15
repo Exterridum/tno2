@@ -1,59 +1,96 @@
 package platform
 
-import "github.com/conas/tno2/util/col"
+import (
+	"github.com/conas/tno2/util/col"
+	"github.com/conas/tno2/wot/backend"
+	"github.com/conas/tno2/wot/frontend"
+	"github.com/conas/tno2/wot/server"
+)
+
+var feTypes map[string]frontend.Factory = make(map[string]frontend.Factory)
+var beTypes map[string]backend.Factory = make(map[string]backend.Factory)
 
 type Platform struct {
-	frontends map[string]*ComponentConfig
-	backends  map[string]*ComponentConfig
-	wots      map[string]*WotConfig
+	frontends map[string]frontend.Frontend
+	backends  map[string]backend.Backend
+	wots      map[string]*server.WotServer
+}
+
+func init() {
+	RegisterFrontendType("HTTP", frontend.NewHTTP)
+	RegisterBackendType("MQTT", backend.NewMQTT)
 }
 
 func NewPlatform() *Platform {
 	return &Platform{
-		frontends: make(map[string]*ComponentConfig),
-		backends:  make(map[string]*ComponentConfig),
-		wots:      make(map[string]*WotConfig),
+		frontends: make(map[string]frontend.Frontend),
+		backends:  make(map[string]backend.Backend),
+		wots:      make(map[string]*server.WotServer),
 	}
 }
 
-func (p *Platform) AddFronted(id string, cc *ComponentConfig) {
-	p.frontends[id] = cc
+func RegisterFrontendType(feTypeID string, factory frontend.Factory) {
+	feTypes[feTypeID] = factory
 }
 
-func (p *Platform) AddBackend(id string, cc *ComponentConfig) {
-	p.backends[id] = cc
+func RegisterBackendType(beTypeID string, factory backend.Factory) {
+	beTypes[beTypeID] = factory
 }
 
-func (p *Platform) AddWotServer(id string, wotConfig *WotConfig) {
-	p.wots[id] = wotConfig
-}
-
-func (p *Platform) Start() {
-}
-
-type ComponentConfig struct {
-	componentType string
-	params        map[string]interface{}
-}
-
-func NewComponentConfig(componentType string, cfgParams ...*col.KeyValue) *ComponentConfig {
+func (p *Platform) AddFrontend(feID, feType string, cfgParams ...*col.KeyValue) *Platform {
 	params := make(map[string]interface{})
 	for _, cfg := range cfgParams {
 		params[cfg.K] = cfg.V
 	}
 
-	return &ComponentConfig{
-		componentType: componentType,
-		params:        params,
+	fe := feTypes[feType](params)
+	p.frontends[feID] = fe
+
+	return p
+
+}
+
+func (p *Platform) AddBackend(bedID, beType string, cfgParams ...*col.KeyValue) *Platform {
+	params := make(map[string]interface{})
+	for _, cfg := range cfgParams {
+		params[cfg.K] = cfg.V
 	}
+
+	be := beTypes[beType](params)
+	p.backends[bedID] = be
+
+	return p
+
 }
 
-type WotConfig struct {
-	modelUri  string
-	frontends []string
-	backends  []string
+func (p *Platform) AddWotServer(id, wotDescURI, ctxPath, beEncID, beID string, feIDs []string) *Platform {
+	wotServer := server.CreateFromDescriptionUri(wotDescURI)
+
+	p.wots[id] = wotServer
+
+	be, _ := p.backends[beID]
+	encoder, error := backend.Encoders.Get(beEncID)
+
+	if error != nil {
+		panic(error)
+	}
+
+	be.Bind(wotServer, ctxPath, encoder)
+
+	for _, feId := range feIDs {
+		frontend, _ := p.frontends[feId]
+		frontend.Bind(ctxPath, wotServer)
+	}
+
+	return p
 }
 
-func NewWotServer(uri, backend string, frontends ...string) *WotConfig {
-	return nil
+func (p *Platform) Start() {
+	for _, fe := range p.frontends {
+		fe.Start()
+	}
+
+	for _, be := range p.backends {
+		be.Start()
+	}
 }

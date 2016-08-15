@@ -1,5 +1,7 @@
 package async
 
+import log "github.com/Sirupsen/logrus"
+
 // Performance testing shows that channels are slow
 type GenServer struct {
 	handlers map[MessageType]func(interface{}) interface{}
@@ -35,6 +37,7 @@ func (gs *GenServer) Start() {
 }
 
 func (gs *GenServer) panicHandler(err interface{}) {
+	log.Info(err)
 	gs.prom.Set(err)
 }
 
@@ -54,6 +57,7 @@ func (gs *GenServer) processor(in <-chan interface{}) {
 	for {
 		mail := <-in
 		msg := mail.(*Message)
+
 		//current promise needs to be cached so in case of panic,
 		//panic handler can fulfill the promise
 		gs.prom = msg.prom

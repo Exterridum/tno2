@@ -23,11 +23,11 @@ func (c *JsonEncoder) Info() string {
 	return ENCODING_JSON
 }
 
-func (c *JsonEncoder) Marshal(w io.Writer, v interface{}) error {
+func (c *JsonEncoder) Encode(w io.Writer, v interface{}) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-func (c *JsonEncoder) Unmarshal(r io.Reader, t interface{}) error {
+func (c *JsonEncoder) Decode(r io.Reader, t interface{}) error {
 	data, err := ioutil.ReadAll(r)
 
 	if err != nil {

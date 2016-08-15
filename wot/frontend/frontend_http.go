@@ -29,10 +29,9 @@ type Http struct {
 
 var hostname = "http://localhost:8080"
 
-func NewHTTP(port int) *Http {
-	// r.PathPrefix("/model").HandlerFunc(Model)
+func NewHTTP(cfg map[string]interface{}) Frontend {
 	http := &Http{
-		port:          port,
+		port:          cfg["port"].(int),
 		router:        mux.NewRouter().StrictSlash(true),
 		hrefs:         make([]string, 0),
 		wotServers:    make(map[string]*server.WotServer),
@@ -45,13 +44,11 @@ func NewHTTP(port int) *Http {
 	return http
 }
 
-func (p *Http) Bind(ctxPath string, s *server.WotServer) *Http {
+func (p *Http) Bind(ctxPath string, s *server.WotServer) {
 	td := s.GetDescription()
 	p.wotServers[ctxPath] = s
 	p.createRoutes(ctxPath, td)
 	updateThingDescription(ctxPath, td)
-
-	return p
 }
 
 func updateThingDescription(ctxPath string, td model.ThingDescription) {
@@ -305,7 +302,7 @@ func writeData(wsc *websocket.Conn, r *http.Request, v interface{}) error {
 		return err
 	}
 
-	err1 := encoder.Marshal(w, v)
+	err1 := encoder.Encode(w, v)
 	err2 := w.Close()
 	if err1 != nil {
 		return err1
@@ -430,7 +427,7 @@ func readBody(r *http.Request, t interface{}) error {
 		return err
 	}
 
-	err = encoder.Unmarshal(r.Body, t)
+	err = encoder.Decode(r.Body, t)
 
 	if err != nil {
 		return err
@@ -449,7 +446,7 @@ func sendOK(w http.ResponseWriter, r *http.Request, payload interface{}) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	encoder.Marshal(w, payload)
+	encoder.Encode(w, payload)
 }
 
 func sendERR(w http.ResponseWriter, r *http.Request, payload interface{}) {
@@ -465,9 +462,9 @@ func sendERR(w http.ResponseWriter, r *http.Request, payload interface{}) {
 
 	switch payload.(type) {
 	default:
-		encoder.Marshal(w, payload)
+		encoder.Encode(w, payload)
 	case error:
-		encoder.Marshal(w, payload.(error).Error())
+		encoder.Encode(w, payload.(error).Error())
 	}
 }
 
