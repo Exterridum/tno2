@@ -1,0 +1,50 @@
+{
+    "@context": [
+        "http://w3c.github.io/wot/w3c-wot-td-context.jsonld"
+    ],
+    "@type": "Thing",
+    "name": "example-thing",
+    "uris": [],
+    "encodings": [
+        "JSON"
+    ],
+    "properties": [
+        {
+            "name": "relay",
+            "valueType": {
+                "type": "boolean"
+            },
+            "writable": true,
+            "hrefs": [
+                "property/relay"
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "name": "throtle-move",
+            "inputData": {
+                "valueType": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 49
+                }
+            },
+            "hrefs": [
+                "action/throtle-move"
+            ]
+        }
+    ],
+    "events": [
+        {
+            "@type": "alert",
+            "name": "critical-temperature-event",
+            "valueType": {
+                "type": "string"
+            },
+            "hrefs": [
+                "event/temperature-alert"
+            ]
+        }
+    ]
+}

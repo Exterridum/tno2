@@ -49,9 +49,12 @@ func newGenServer(wc *WotCore) *async.GenServer {
 				return WOT_NO_ACTION_HANDLER
 			}
 
-			//Progress handler scheduled status is set at wot_server level.
+			//Progress handler scheduled status is set at WotServer level.
 			result := handler(msg.arg, msg.ph)
-			msg.ph.Done(result)
+
+			if false == msg.ph.IsFailed() {
+				msg.ph.Done(result)
+			}
 
 			return WOT_OK
 		}).

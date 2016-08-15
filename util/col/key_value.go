@@ -14,6 +14,13 @@ func NewConcurentMap() *Map {
 	}
 }
 
+func AsConcurentMap(m map[string]interface{}) *Map {
+	return &Map{
+		l: &sync.RWMutex{},
+		v: m,
+	}
+}
+
 func (am *Map) Add(k string, v interface{}) {
 	am.l.Lock()
 	am.v[k] = v
@@ -56,4 +63,14 @@ func KV(k string, v interface{}) *KeyValue {
 		K: k,
 		V: v,
 	}
+}
+
+func AsMap(kvs ...*KeyValue) map[string]interface{} {
+	params := make(map[string]interface{})
+
+	for _, kv := range kvs {
+		params[kv.K] = kv.V
+	}
+
+	return params
 }

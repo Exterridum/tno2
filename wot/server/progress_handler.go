@@ -88,6 +88,11 @@ func (ph *WotProgressHandler) Fail(data interface{}) {
 	ph.subscribers.Publish(status)
 }
 
+func (ph *WotProgressHandler) IsFailed() bool {
+	s := ph.state.Load().(*TaskStatus)
+	return s.Status == TASK_FAILED
+}
+
 type ActionResults struct {
 	rwmut  *sync.RWMutex
 	states map[string]*atomic.Value

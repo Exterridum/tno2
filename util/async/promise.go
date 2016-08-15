@@ -52,6 +52,7 @@ type ProgressHandler interface {
 	Update(interface{})
 	Done(interface{})
 	Fail(interface{})
+	IsFailed() bool
 }
 
 // type StatusHandler func(TaskStatus, interface{})

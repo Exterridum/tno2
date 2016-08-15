@@ -51,10 +51,7 @@ func (p *Platform) AddFrontend(feID, feType string, cfgParams ...*col.KeyValue) 
 }
 
 func (p *Platform) AddBackend(bedID, beType string, cfgParams ...*col.KeyValue) *Platform {
-	params := make(map[string]interface{})
-	for _, cfg := range cfgParams {
-		params[cfg.K] = cfg.V
-	}
+	params := col.AsMap(cfgParams)
 
 	be := beTypes[beType](params)
 	p.backends[bedID] = be
