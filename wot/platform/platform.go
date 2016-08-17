@@ -37,7 +37,7 @@ func RegisterBackendType(beTypeID string, factory backend.Factory) {
 	beTypes[beTypeID] = factory
 }
 
-func (p *Platform) AddFrontend(feID, feType string, cfgParams ...*col.KeyValue) *Platform {
+func (p *Platform) AddFrontend(feID, feType string, cfgParams ...*col.KeyValue) {
 	params := make(map[string]interface{})
 	for _, cfg := range cfgParams {
 		params[cfg.K] = cfg.V
@@ -45,26 +45,18 @@ func (p *Platform) AddFrontend(feID, feType string, cfgParams ...*col.KeyValue) 
 
 	fe := feTypes[feType](params)
 	p.frontends[feID] = fe
-
-	return p
-
 }
 
-func (p *Platform) AddBackend(bedID, beType string, cfgParams ...*col.KeyValue) *Platform {
+func (p *Platform) AddBackend(bedID, beType string, cfgParams ...*col.KeyValue) {
 	params := col.AsMap(cfgParams)
 
 	be := beTypes[beType](params)
 	p.backends[bedID] = be
-
-	return p
-
 }
 
-func (p *Platform) AddWotServer(id, wotDescURI, ctxPath, beEncID, beID string, feIDs []string) *Platform {
+func (p *Platform) AddWotServer(id, wotDescURI, ctxPath, beEncID, beID string, feIDs []string) {
 	wotServer := server.CreateFromDescriptionUri(wotDescURI)
-
 	p.wots[id] = wotServer
-
 	be, _ := p.backends[beID]
 	encoder, error := backend.Encoders.Get(beEncID)
 
@@ -78,8 +70,6 @@ func (p *Platform) AddWotServer(id, wotDescURI, ctxPath, beEncID, beID string, f
 		frontend, _ := p.frontends[feId]
 		frontend.Bind(ctxPath, wotServer)
 	}
-
-	return p
 }
 
 func (p *Platform) Start() {

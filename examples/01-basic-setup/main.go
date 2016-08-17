@@ -11,17 +11,18 @@ import (
 	"github.com/conas/tno2/wot/server"
 )
 
+var model = "file://../example-model.json"
+
+//Basic low level wotServer setup
 func main() {
-	// Create WotServer
-	wotServer := server.CreateFromDescriptionUri("file://../example-model.json")
-	// Attach functionality to WotServer
+	//WoT server defines implements interaction with device
+	wotServer := server.CreateFromDescriptionUri(model)
 	setupWotServer(wotServer)
 
-	// WotServer is decoupled from frontend transport protocols. In this step new transport server is created.
-	// We can attach any number of generic WotServers under one transport server
-	feCfg := col.AsMap(col.KV("port", 8080))
+	//Frontend is transport implementation
+	feCfg := col.AsMap([]*col.KeyValue{col.KV("port", 8080)})
 	fe := frontend.NewHTTP(feCfg)
-	fe.Bind("/example1", wotServer)
+	fe.Bind("/01-basic-example", wotServer)
 	fe.Start()
 }
 
@@ -35,28 +36,19 @@ type CriticalEvent struct {
 	EventData string `json:"eventData"`
 }
 
-// Following section describes WotServer behaviour upon receiving specific requests
+//Implementation of interaction with Web Device
 func setupWotServer(s *server.WotServer) {
-	// Each device can have properties which alter state of the device.
 	s.OnGetProperty("relay", func() interface{} {
-		// function to access real device/thing properties, such as temperature, etc.
 		log.Info("OnGetProperty: relay")
 		return db["relay"]
 	}).OnUpdateProperty("relay", func(newValue interface{}) {
-		// Define how we load property from real device/thing
 		log.Info("OnUpdateProperty: relay")
 		db["relay"] = newValue
 	}).OnInvokeAction("throtle-move", func(args interface{}, ph async.ProgressHandler) interface{} {
-		// Define how to interract with actuator. In this case we open throtle of some device/thing
-		// Action receives StatusHandler structure which can be used to monitor action progress.
-		// Using StatusHandler is not mandatory, but it is a good way to notify users about state of the actions
-
-		// Validate input
 		log.Info("OnInvokeAction: throtle-move, position: ", args)
-
 		m := args.(map[string]interface{})
-
 		targetPos := int(m["value"].(float64))
+
 		if targetPos < 0 || targetPos > 50 {
 			ph.Fail("Invalid throtle position.")
 			return nil
@@ -65,7 +57,6 @@ func setupWotServer(s *server.WotServer) {
 		steps := 4
 		step := targetPos / steps
 
-		// Slowly open the throtle
 		for i := 0; i < steps; i++ {
 			ph.Update(&Throtle{ThrotlePosition: i * step})
 			time.Sleep(time.Second * 5)

@@ -5,26 +5,31 @@ import (
 	"time"
 
 	"github.com/conas/tno2/util/async"
+	"github.com/conas/tno2/wot/backend"
+	"github.com/conas/tno2/wot/platform"
 	"github.com/conas/tno2/wot/server"
 )
 
-// SimBackend is Backend pattern demonstration. We can setup WotServer directly w/o Backend pattern
-type Backend struct{}
+type SimulatorBackend struct{}
 
-func SimulatorBackend() *Backend {
-	return &Backend{}
+func init() {
+	platform.RegisterBackendType("SIMULATOR", NewSimulatorBackend)
 }
 
-func (b *Backend) Bind(s *server.WotServer) *Backend {
-	log.Println("TestDriver -> initializing server ->", s.GetDescription().Name)
+func NewSimulatorBackend(cfg map[string]interface{}) backend.Backend {
+	return &SimulatorBackend{}
+}
+
+func (b *SimulatorBackend) Bind(wos *server.WotServer, baseTopic string, encoder backend.Encoder) {
+	log.Println("TestDriver -> initializing server ->", wos.GetDescription().Name)
 
 	datastore := make(map[string]interface{})
 
-	addPropsHandlers(s, datastore)
-	addActionsHandlers(s)
-
-	return b
+	addPropsHandlers(wos, datastore)
+	addActionsHandlers(wos)
 }
+
+func (b *SimulatorBackend) Start() {}
 
 func addPropsHandlers(s *server.WotServer, datastore map[string]interface{}) {
 	for _, p := range s.GetDescription().Properties {

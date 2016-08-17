@@ -65,7 +65,7 @@ func KV(k string, v interface{}) *KeyValue {
 	}
 }
 
-func AsMap(kvs ...*KeyValue) map[string]interface{} {
+func AsMap(kvs []*KeyValue) map[string]interface{} {
 	params := make(map[string]interface{})
 
 	for _, kv := range kvs {
