@@ -51,14 +51,14 @@ func (p *Http) Bind(ctxPath string, s *server.WotServer) {
 	updateThingDescription(ctxPath, td)
 }
 
-func updateThingDescription(ctxPath string, td model.ThingDescription) {
-	td.Uris = append(td.Uris, str.Concat(hostname, ctxPath))
-	td.Encodings = Encoders.Registered()
-}
-
 func (p *Http) Start() {
 	port := str.Concat(":", strconv.Itoa(p.port))
 	log.Fatal(http.ListenAndServe(port, p.router))
+}
+
+func updateThingDescription(ctxPath string, td model.ThingDescription) {
+	td.Uris = append(td.Uris, str.Concat(hostname, ctxPath))
+	td.Encodings = Encoders.Registered()
 }
 
 func (p *Http) registerRoot() {

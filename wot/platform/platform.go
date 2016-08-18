@@ -1,6 +1,8 @@
 package platform
 
 import (
+	"sync"
+
 	"github.com/conas/tno2/util/col"
 	"github.com/conas/tno2/wot/backend"
 	"github.com/conas/tno2/wot/frontend"
@@ -72,12 +74,26 @@ func (p *Platform) AddWotServer(id, wotDescURI, ctxPath, beEncID, beID string, f
 	}
 }
 
-func (p *Platform) Start() {
+func (p *Platform) WotServer(id string) *server.WotServer {
+	return p.wots[id]
+}
+
+func (p *Platform) Start() *sync.WaitGroup {
+	wg := &sync.WaitGroup{}
+
 	for _, fe := range p.frontends {
-		fe.Start()
+		wg.Add(1)
+		go func() {
+			fe.Start()
+		}()
 	}
 
 	for _, be := range p.backends {
-		be.Start()
+		wg.Add(1)
+		go func() {
+			be.Start()
+		}()
 	}
+
+	return wg
 }

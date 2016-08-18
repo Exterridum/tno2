@@ -15,7 +15,10 @@ func main() {
 	p.AddFrontend("http-1", "HTTP", col.KV("port", 8080))
 	p.AddBackend("mqtt-1", "MQTT", col.KV("url", "tcp://localhost:1883"))
 	p.AddWotServer("example-dev", model, "/02-mqtt-example", "SIMPLE_URL_CODEC", "mqtt-1", []string{"http-1"})
-	p.Start()
+	wg := p.Start()
+
+	startEventGenerator(p.WotServer("example-dev"))
+	wg.Wait()
 }
 
 func startEventGenerator(wotServet *server.WotServer) {

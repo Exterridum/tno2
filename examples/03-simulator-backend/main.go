@@ -13,9 +13,12 @@ var model = "file://../example-model.json"
 func main() {
 	p := platform.NewPlatform()
 	p.AddFrontend("http-1", "HTTP", col.KV("port", 8080))
-	p.AddBackend("sim-1", "SIMULATOR", col.KV("url", "tcp://localhost:1883"))
+	p.AddBackend("sim-1", "SIMULATOR")
 	p.AddWotServer("example-dev", model, "/03-simulator", "SIMPLE_URL_CODEC", "sim-1", []string{"http-1"})
-	p.Start()
+	wg := p.Start()
+
+	startEventGenerator(p.WotServer("example-dev"))
+	wg.Wait()
 }
 
 func startEventGenerator(wotServet *server.WotServer) {

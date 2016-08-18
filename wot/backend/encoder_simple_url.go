@@ -19,7 +19,7 @@ func (sc *SimpleUrlEncoder) Info() string {
 	return "SIMPLE_URL_ENCODER"
 }
 
-func (sc *SimpleUrlEncoder) Decode(buf []byte) (int8, string, string, interface{}) {
+func (sc *SimpleUrlEncoder) Decode(buf []byte) (int8, string, interface{}) {
 	data := string(buf)
 	nd := strings.Split(data, ":")
 	msgTypeCode, _ := strconv.ParseInt(nd[0], 10, 8)
@@ -28,13 +28,13 @@ func (sc *SimpleUrlEncoder) Decode(buf []byte) (int8, string, string, interface{
 
 	switch int8(msgTypeCode) {
 	case BE_ACTION_RS:
-		return BE_ACTION_RS, conversationID, "", msgData
+		return BE_ACTION_RS, conversationID, msgData
 	case BE_GET_PROP_RS:
-		return BE_GET_PROP_RS, conversationID, "", msgData
+		return BE_GET_PROP_RS, conversationID, msgData
 	case BE_EVENT:
-		return BE_EVENT, "", "", msgData
+		return BE_EVENT, "", msgData
 	default:
-		return BE_UNKNOWN_MSG_TYPE, "", "", nil
+		return BE_UNKNOWN_MSG_TYPE, "", nil
 	}
 }
 
