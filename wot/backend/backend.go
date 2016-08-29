@@ -28,8 +28,8 @@ const (
 
 type Encoder interface {
 	Info() string
-	Decode(buf []byte) (msgType int8, conversationID string, data interface{})
-	Encode(msgType int8, conversationID string, msgName string, data interface{}) []byte
+	Decode(buf []byte) (msgType int8, conversationID, msgName string, data interface{})
+	Encode(msgType int8, conversationID, msgName string, data interface{}) []byte
 }
 
 type EncoderRegistry struct {

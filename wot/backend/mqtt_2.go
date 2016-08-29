@@ -13,12 +13,12 @@ import (
 	"github.com/eclipse/paho.mqtt.golang"
 )
 
-type MQTT struct {
+type MQTT_2 struct {
 	client   mqtt.Client
 	bindings map[string]*col.Map
 }
 
-func NewMQTT(cfg map[string]interface{}) Backend {
+func NewMQTT_2(cfg map[string]interface{}) Backend {
 	url := cfg["url"].(string)
 	opts := mqtt.NewClientOptions().AddBroker(url).SetClientID("ClientID")
 	opts.SetKeepAlive(20 * time.Second)
@@ -29,13 +29,13 @@ func NewMQTT(cfg map[string]interface{}) Backend {
 		panic(token.Error())
 	}
 
-	return &MQTT{
+	return &MQTT_2{
 		client:   c,
 		bindings: make(map[string]*col.Map),
 	}
 }
 
-func (mb *MQTT) Bind(wos *server.WotServer, baseTopic string, encoder Encoder) {
+func (mb *MQTT_2) Bind(wos *server.WotServer, baseTopic string, encoder Encoder) {
 	bindingID, _ := sec.UUID4()
 	mb.bindings[bindingID] = col.NewConcurentMap()
 
@@ -43,9 +43,9 @@ func (mb *MQTT) Bind(wos *server.WotServer, baseTopic string, encoder Encoder) {
 	mb.setupDeviceOutTopic(bindingID, baseTopic, wos, encoder)
 }
 
-func (mb *MQTT) Start() {}
+func (mb *MQTT_2) Start() {}
 
-func (mb *MQTT) setupDeviceInTopic(bindingID string, baseTopic string, wos *server.WotServer, encoder Encoder) {
+func (mb *MQTT_2) setupDeviceInTopic(bindingID string, baseTopic string, wos *server.WotServer, encoder Encoder) {
 	deviceInTopic := str.Concat(baseTopic, "/i")
 	log.Info("MQTTBackend: device in topic -> ", deviceInTopic)
 
@@ -69,7 +69,7 @@ func (mb *MQTT) setupDeviceInTopic(bindingID string, baseTopic string, wos *serv
 	}
 }
 
-func (mb *MQTT) publish(
+func (mb *MQTT_2) publish(
 	bindingID string,
 	encoder Encoder,
 	deviceInTopic string,
@@ -99,7 +99,7 @@ func (mb *MQTT) publish(
 	return response
 }
 
-func (mb *MQTT) setupDeviceOutTopic(bindingID string, baseTopic string, wos *server.WotServer, encoder Encoder) {
+func (mb *MQTT_2) setupDeviceOutTopic(bindingID string, baseTopic string, wos *server.WotServer, encoder Encoder) {
 	deviceOutTopic := str.Concat(baseTopic, "/o")
 	log.Info("MQTTBackend: device out topic -> ", deviceOutTopic)
 	token2 := mb.client.Subscribe(deviceOutTopic, 0, outSubHandler(wos, encoder, mb.bindings[bindingID]))

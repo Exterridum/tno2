@@ -1,0 +1,53 @@
+{
+    "@context": [
+        "http://w3c.github.io/wot/w3c-wot-td-context.jsonld"
+    ],
+    "@type": "Thing",
+    "name": "dth-esp8266-1",
+    "uris": [],
+    "encodings": [
+        "JSON"
+    ],
+    "properties": [
+        {
+            "name": "temperature",
+            "valueType": {
+                "type": "number"
+            },
+            "writable": true,
+            "hrefs": [
+                "property/temperature"
+            ]
+        },
+        {
+            "name": "humidity",
+            "valueType": {
+                "type": "number"
+            },
+            "writable": true,
+            "hrefs": [
+                "property/humidity"
+            ]
+        }
+    ],
+    "events": [
+        {
+            "@type": "property-change",
+            "name": "property-change",
+            "valueType": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "data": {
+                        "type": "object"
+                    }
+                }
+            },
+            "hrefs": [
+                "event/property-change"
+            ]
+        }
+    ]
+}

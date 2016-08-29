@@ -20,7 +20,7 @@ type Platform struct {
 
 func init() {
 	RegisterFrontendType("HTTP", frontend.NewHTTP)
-	RegisterBackendType("MQTT", backend.NewMQTT)
+	RegisterBackendType("MQTT-1", backend.NewMQTT_1)
 }
 
 func NewPlatform() *Platform {

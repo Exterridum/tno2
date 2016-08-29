@@ -26,14 +26,14 @@ type EventListener struct {
 }
 
 type Event struct {
-	Name      string      `json:"name,omitempty"`
+	Event     string      `json:"event,omitempty"`
 	Timestamp time.Time   `json:"timestamp,omitempty"`
 	Data      interface{} `json:"data,omitempty"`
 }
 
 func newEvent(eventName string, data interface{}) *Event {
 	return &Event{
-		Name:      eventName,
+		Event:     eventName,
 		Timestamp: time.Now(),
 		Data:      data,
 	}
