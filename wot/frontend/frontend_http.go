@@ -114,14 +114,14 @@ func (p *Http) registerProperties(ctxPath string, properties []model.Property) {
 		p.addRoute(&route{
 			method:      "GET",
 			pattern:     contextPath(ctxPath, prop.Hrefs[0]),
-			handlerFunc: p.propertyGetHandler(ctxPath, &prop),
+			handlerFunc: p.propertyGetHandler(ctxPath, prop),
 		})
 
 		if prop.Writable {
 			p.addRoute(&route{
 				method:      "PUT",
 				pattern:     contextPath(ctxPath, prop.Hrefs[0]),
-				handlerFunc: p.propertySetHandler(ctxPath, &prop),
+				handlerFunc: p.propertySetHandler(ctxPath, prop),
 			})
 		}
 
@@ -171,10 +171,9 @@ func (p *Http) registerEvents(ctxPath string, events []model.Event) {
 	}
 }
 
-func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
+func (p *Http) propertyGetHandler(ctxPath string, prop model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		value := p.wotServers[ctxPath].GetProperty(prop.Name)
-
 		data := value.Get()
 
 		switch data.(type) {
@@ -190,7 +189,7 @@ func (p *Http) propertyGetHandler(ctxPath string, prop *model.Property) func(w h
 	}
 }
 
-func (p *Http) propertySetHandler(ctxPath string, prop *model.Property) func(w http.ResponseWriter, r *http.Request) {
+func (p *Http) propertySetHandler(ctxPath string, prop model.Property) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var wo interface{}
 		err := readBody(r, &wo)

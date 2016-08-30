@@ -5,6 +5,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/conas/tno2/util/sec"
 	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot/server"
 	"github.com/eclipse/paho.mqtt.golang"
@@ -23,7 +24,8 @@ func NewMQTT_1(cfg map[string]interface{}) Backend {
 	username := cfg["username"].(string)
 	password := cfg["password"].(string)
 
-	opts := mqtt.NewClientOptions().AddBroker(url).SetClientID("ClientID")
+	id, _ := sec.UUID4()
+	opts := mqtt.NewClientOptions().AddBroker(url).SetClientID(id)
 	opts.SetKeepAlive(20 * time.Second)
 	opts.SetPingTimeout(1 * time.Second)
 	opts.SetUsername(username)
@@ -43,16 +45,15 @@ func NewMQTT_1(cfg map[string]interface{}) Backend {
 //TODO: Implement encoder
 func (mb *MQTT_1) Bind(wos *server.WotServer, ctxPath string, encoder Encoder) {
 	mb.setup(ctxPath, wos)
-	// mb.setupDeviceOutTopic(ctxPath, wos)
 }
 
-func (mb *MQTT_1) Start() {
-}
+func (mb *MQTT_1) Start() {}
 
 func (mb *MQTT_1) setup(ctxPath string, wos *server.WotServer) {
 	deviceTopic := str.Concat(ctxPath, "/#")
 	token2 := mb.client.Subscribe(deviceTopic, 0, mb.eventHandler(ctxPath, wos))
 	if token2.Wait() && token2.Error() != nil {
+		log.Fatal(token2.Error)
 		os.Exit(1)
 	}
 	log.Info("MQTT_1 Backend: subscribed to device topic -> ", deviceTopic)
