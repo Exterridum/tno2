@@ -10,6 +10,7 @@ import (
 	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot/model"
 	"github.com/conas/tno2/wot/server"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
@@ -52,8 +53,12 @@ func (p *Http) Bind(ctxPath string, s *server.WotServer) {
 }
 
 func (p *Http) Start() {
+
 	port := str.Concat(":", strconv.Itoa(p.port))
-	log.Fatal(http.ListenAndServe(port, p.router))
+	log.Fatal(http.ListenAndServe(port,
+		handlers.CORS(
+			handlers.AllowedOrigins([]string{"*"}),
+			handlers.AllowedMethods([]string{"GET", "PUT", "POST"}))(p.router)))
 }
 
 func (p *Http) updateThingDescription(ctxPath string, td *model.ThingDescription) {
@@ -80,11 +85,24 @@ func (p *Http) registerRoot() {
 // ----- ThingDescription parser methods
 
 func (p *Http) createRoutes(ctxPath string, td *model.ThingDescription) {
+	p.enablePreflight(ctxPath)
 	p.registerDeviceRoot(ctxPath)
 	p.registerDeviceDescriptor(ctxPath, td)
 	p.registerProperties(ctxPath, td.Properties)
 	p.registerActions(ctxPath, td.Actions)
 	p.registerEvents(ctxPath, td.Events)
+}
+
+func (p *Http) enablePreflight(ctxPath string) {
+	p.addRoute(&route{
+		method:  "OPTIONS",
+		pattern: contextPath(ctxPath, ""),
+		handlerFunc: func(w http.ResponseWriter, r *http.Request) {
+			hrefs := links(httpSubURL(r, "description"))
+
+			sendOK(w, r, hrefs)
+		},
+	})
 }
 
 func (p *Http) registerDeviceRoot(ctxPath string) {

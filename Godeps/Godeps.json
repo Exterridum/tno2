@@ -3,7 +3,7 @@
 	"GoVersion": "go1.6",
 	"GodepVersion": "v74",
 	"Packages": [
-		"github.com/conas/tno2/examples/99-public"
+		"github.com\\conas\\tno2\\examples\\99-public"
 	],
 	"Deps": [
 		{
@@ -25,6 +25,11 @@
 			"ImportPath": "github.com/gorilla/context",
 			"Comment": "v1.1-4-gaed02d1",
 			"Rev": "aed02d124ae4a0e94fea4541c8effd05bf0c8296"
+		},
+		{
+			"ImportPath": "github.com/gorilla/handlers",
+			"Comment": "v1.1-11-ga577578",
+			"Rev": "a5775781a543af3c6b9f5baf10995e4d14168950"
 		},
 		{
 			"ImportPath": "github.com/gorilla/mux",
