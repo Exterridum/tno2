@@ -73,6 +73,7 @@ func (p *Http) registerPreflight() {
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, PUT, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "X-PINGOTHER, Content-Type")
 		w.Header().Set("Access-Control-Max-Age", "86400")
+		w.WriteHeader(http.StatusOK)
 	})
 }
 
