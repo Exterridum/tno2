@@ -10,7 +10,6 @@ import (
 	"github.com/conas/tno2/util/str"
 	"github.com/conas/tno2/wot/model"
 	"github.com/conas/tno2/wot/server"
-	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
@@ -42,6 +41,7 @@ func NewHTTP(cfg map[string]interface{}) Frontend {
 	}
 
 	http.registerRoot()
+	http.registerPreflight()
 
 	return http
 }
@@ -56,10 +56,11 @@ func (p *Http) Bind(ctxPath string, s *server.WotServer) {
 func (p *Http) Start() {
 
 	port := str.Concat(":", strconv.Itoa(p.port))
-	log.Fatal(http.ListenAndServe(port,
-		handlers.CORS(
-			handlers.AllowedOrigins([]string{"*"}),
-			handlers.AllowedMethods([]string{"GET", "PUT", "POST"}))(p.router)))
+	log.Fatal(http.ListenAndServe(port, p.router))
+	// log.Fatal(http.ListenAndServe(port,
+	// 	handlers.CORS(
+	// 		handlers.AllowedOrigins([]string{"*"}),
+	// 		handlers.AllowedMethods([]string{"GET", "PUT", "POST", "OPTIONS"}))(p.router)))
 }
 
 func (p *Http) updateThingDescription(ctxPath string, td *model.ThingDescription) {
@@ -68,13 +69,13 @@ func (p *Http) updateThingDescription(ctxPath string, td *model.ThingDescription
 }
 
 func (p *Http) registerPreflight() {
-	p.router.Headers("OPTIONS").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	p.addPreflight(&route{handlerFunc: func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, PUT, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "X-PINGOTHER, Content-Type")
 		w.Header().Set("Access-Control-Max-Age", "86400")
 		w.WriteHeader(http.StatusOK)
-	})
+	}})
 }
 
 func (p *Http) registerRoot() {
@@ -526,5 +527,11 @@ func (p *Http) addRoute(route *route) {
 		Methods(route.method).
 		Path(route.pattern).
 		Name(route.pattern).
+		Handler(route.handlerFunc)
+}
+
+func (p *Http) addPreflight(route *route) {
+	p.router.
+		Methods("OPTIONS").
 		Handler(route.handlerFunc)
 }
