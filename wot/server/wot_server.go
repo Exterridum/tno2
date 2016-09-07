@@ -103,8 +103,8 @@ func (s *WotServer) RemoveAllListeners(eventName string) *WotServer {
 
 // ----- CALLS
 
-func (s *WotServer) GetDescription() model.ThingDescription {
-	return *s.core.td
+func (s *WotServer) GetDescription() *model.ThingDescription {
+	return s.core.td
 }
 
 func (s *WotServer) GetProperty(propertyName string) *async.Promise {

@@ -1,10 +1,10 @@
 package frontend
 
 import (
-	"log"
 	"net/http"
 	"strconv"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/conas/tno2/util/async"
 	"github.com/conas/tno2/util/sec"
 	"github.com/conas/tno2/util/str"
@@ -17,6 +17,7 @@ import (
 // FIXMEs:
 
 type Http struct {
+	hostname      string
 	port          int
 	router        *mux.Router
 	hrefs         []string
@@ -27,10 +28,9 @@ type Http struct {
 
 // ----- Server API methods
 
-var hostname = "http://localhost:8080"
-
 func NewHTTP(cfg map[string]interface{}) Frontend {
 	http := &Http{
+		hostname:      cfg["hostname"].(string),
 		port:          cfg["port"].(int),
 		router:        mux.NewRouter().StrictSlash(true),
 		hrefs:         make([]string, 0),
@@ -48,7 +48,7 @@ func (p *Http) Bind(ctxPath string, s *server.WotServer) {
 	td := s.GetDescription()
 	p.wotServers[ctxPath] = s
 	p.createRoutes(ctxPath, td)
-	updateThingDescription(ctxPath, td)
+	p.updateThingDescription(ctxPath, td)
 }
 
 func (p *Http) Start() {
@@ -56,8 +56,8 @@ func (p *Http) Start() {
 	log.Fatal(http.ListenAndServe(port, p.router))
 }
 
-func updateThingDescription(ctxPath string, td model.ThingDescription) {
-	td.Uris = append(td.Uris, str.Concat(hostname, ctxPath))
+func (p *Http) updateThingDescription(ctxPath string, td *model.ThingDescription) {
+	td.Uris = append(td.Uris, str.Concat("http://", p.hostname, ":", p.port, ctxPath))
 	td.Encodings = Encoders.Registered()
 }
 
@@ -79,7 +79,7 @@ func (p *Http) registerRoot() {
 
 // ----- ThingDescription parser methods
 
-func (p *Http) createRoutes(ctxPath string, td model.ThingDescription) {
+func (p *Http) createRoutes(ctxPath string, td *model.ThingDescription) {
 	p.registerDeviceRoot(ctxPath)
 	p.registerDeviceDescriptor(ctxPath, td)
 	p.registerProperties(ctxPath, td.Properties)
@@ -99,7 +99,7 @@ func (p *Http) registerDeviceRoot(ctxPath string) {
 	})
 }
 
-func (p *Http) registerDeviceDescriptor(ctxPath string, td model.ThingDescription) {
+func (p *Http) registerDeviceDescriptor(ctxPath string, td *model.ThingDescription) {
 	p.addRoute(&route{
 		method:  "GET",
 		pattern: contextPath(ctxPath, "description"),
@@ -125,7 +125,7 @@ func (p *Http) registerProperties(ctxPath string, properties []model.Property) {
 			})
 		}
 
-		prop.Hrefs[0] = str.Concat(hostname, ctxPath, "/", prop.Hrefs[0])
+		prop.Hrefs[0] = str.Concat("http://", p.hostname, ":", p.port, ctxPath, "/", prop.Hrefs[0])
 	}
 }
 
@@ -149,7 +149,7 @@ func (p *Http) registerActions(ctxPath string, actions []model.Action) {
 			handlerFunc: p.actionWSTaskHandler(p.wotServers[ctxPath]),
 		})
 
-		action.Hrefs[0] = str.Concat(hostname, ctxPath, "/", action.Hrefs[0])
+		action.Hrefs[0] = str.Concat("http://", p.hostname, ":", p.port, ctxPath, "/", action.Hrefs[0])
 	}
 }
 
@@ -167,7 +167,7 @@ func (p *Http) registerEvents(ctxPath string, events []model.Event) {
 			handlerFunc: p.eventWSClientHandler(p.wotServers[ctxPath]),
 		})
 
-		event.Hrefs[0] = str.Concat(hostname, ctxPath, "/", event.Hrefs[0])
+		event.Hrefs[0] = str.Concat("http://", p.hostname, ":", p.port, ctxPath, "/", event.Hrefs[0])
 	}
 }
 
