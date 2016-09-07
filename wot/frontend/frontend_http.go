@@ -16,6 +16,7 @@ import (
 )
 
 // FIXMEs:
+// There is some issue about enabling cors using gorilla handlers. workaround is done manually
 
 type Http struct {
 	hostname      string
@@ -64,6 +65,15 @@ func (p *Http) Start() {
 func (p *Http) updateThingDescription(ctxPath string, td *model.ThingDescription) {
 	td.Uris = append(td.Uris, str.Concat("http://", p.hostname, ":", p.port, ctxPath))
 	td.Encodings = Encoders.Registered()
+}
+
+func (p *Http) registerPreflight() {
+	p.router.Headers("OPTIONS").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, PUT, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "X-PINGOTHER, Content-Type")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+	})
 }
 
 func (p *Http) registerRoot() {
@@ -462,6 +472,7 @@ func sendOK(w http.ResponseWriter, r *http.Request, payload interface{}) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
 	encoder.Encode(w, payload)
 }
@@ -475,6 +486,7 @@ func sendERR(w http.ResponseWriter, r *http.Request, payload interface{}) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusBadRequest)
 
 	switch payload.(type) {
@@ -487,6 +499,7 @@ func sendERR(w http.ResponseWriter, r *http.Request, payload interface{}) {
 
 func sendPlainERR(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusBadRequest)
 
 	w.Write([]byte(err.Error()))
