@@ -13,6 +13,7 @@ var feTypes map[string]frontend.Factory = make(map[string]frontend.Factory)
 var beTypes map[string]backend.Factory = make(map[string]backend.Factory)
 
 type Platform struct {
+	hostname  string
 	frontends map[string]frontend.Frontend
 	backends  map[string]backend.Backend
 	wots      map[string]*server.WotServer
@@ -23,8 +24,9 @@ func init() {
 	RegisterBackendType("MQTT-1", backend.NewMQTT_1)
 }
 
-func NewPlatform() *Platform {
+func NewPlatform(hostname string) *Platform {
 	return &Platform{
+		hostname:  hostname,
 		frontends: make(map[string]frontend.Frontend),
 		backends:  make(map[string]backend.Backend),
 		wots:      make(map[string]*server.WotServer),
@@ -41,6 +43,7 @@ func RegisterBackendType(beTypeID string, factory backend.Factory) {
 
 func (p *Platform) AddFrontend(feID, feType string, cfgParams ...*col.KeyValue) {
 	params := make(map[string]interface{})
+	params["hostname"] = p.hostname
 	for _, cfg := range cfgParams {
 		params[cfg.K] = cfg.V
 	}

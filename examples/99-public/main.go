@@ -8,10 +8,9 @@ import (
 var dhtModel = "file://dht-model.json"
 
 func main() {
-	p := platform.NewPlatform()
+	p := platform.NewPlatform("tno2.net")
 	p.AddFrontend("http-1", "HTTP",
-		col.KV("port", 8080),
-		col.KV("hostname", "tno2.net"))
+		col.KV("port", 8080))
 	p.AddBackend("mqtt-1", "MQTT-1",
 		col.KV("url", "tcp://46.28.108.197:8883"),
 		col.KV("username", "mqtt1"),
