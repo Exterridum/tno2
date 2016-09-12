@@ -43,10 +43,10 @@ func RegisterBackendType(beTypeID string, factory backend.Factory) {
 
 func (p *Platform) AddFrontend(feID, feType string, cfgParams ...*col.KeyValue) {
 	params := make(map[string]interface{})
-	params["hostname"] = p.hostname
 	for _, cfg := range cfgParams {
 		params[cfg.K] = cfg.V
 	}
+	params["hostname"] = p.hostname
 
 	fe := feTypes[feType](params)
 	p.frontends[feID] = fe
